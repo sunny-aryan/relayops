@@ -1,88 +1,138 @@
-import { Gauge } from "lucide-react"
+import { useState } from "react"
+import { AlertCircle, Inbox } from "lucide-react"
 
-import { PageHeader } from "@/components/shared/page-header"
+import { EndpointHealthTable } from "@/components/overview/endpoint-health-table"
+import { FailureClusterList } from "@/components/overview/failure-cluster-list"
+import { MetricStrip } from "@/components/overview/metric-strip"
+import { OperationalSummary } from "@/components/overview/operational-summary"
+import { TimeRangeSelector } from "@/components/overview/time-range-selector"
+import { TrendChart } from "@/components/overview/trend-chart"
+import { EmptyState } from "@/components/shared/empty-state"
 import { Panel } from "@/components/shared/panel"
-import { PlaceholderPanel } from "@/components/shared/placeholder-panel"
-import { EndpointHealthBadge } from "@/components/shared/status-badge"
+import { IncidentSeverityBadge } from "@/components/shared/status-badge"
+import { PageHeader } from "@/components/shared/page-header"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useApp } from "@/contexts/app-context"
 import { useAsync } from "@/hooks/use-async"
-import { formatCount } from "@/lib/format"
-import { listActiveIncidents, listEndpoints } from "@/repositories"
+import { formatDateTime } from "@/lib/format"
+import { timeRangeLabels } from "@/lib/labels"
+import { getOverview } from "@/repositories"
+import type { OverviewTimeRange } from "@/types"
+
+function OverviewSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading overview">
+      <Skeleton className="h-20 w-full rounded-lg" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+      <Skeleton className="h-64 w-full rounded-lg" />
+      <Skeleton className="h-48 w-full rounded-lg" />
+    </div>
+  )
+}
 
 export function OverviewPage() {
   const { environment } = useApp()
-  const endpoints = useAsync(() => listEndpoints(environment), [environment])
-  const incidents = useAsync(
-    () =>
-      listActiveIncidents().then((all) =>
-        all.filter((i) => i.affectedEnvironments.includes(environment))
-      ),
-    [environment]
+  const [timeRange, setTimeRange] = useState<OverviewTimeRange>("24h")
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const { data, loading, error } = useAsync(
+    () => getOverview(environment, timeRange),
+    [environment, timeRange, reloadKey]
+  )
+
+  const endpointNames = Object.fromEntries(
+    (data?.endpoints ?? []).map((r) => [r.endpoint.id, r.endpoint.name])
   )
 
   return (
     <>
       <PageHeader
         title="Overview"
-        description="A live summary of webhook health and delivery reliability for this environment."
+        description="Webhook health and delivery reliability for this environment."
+        actions={<TimeRangeSelector value={timeRange} onChange={setTimeRange} />}
       />
-      <Panel
-        title="Endpoint health"
-        description="Current health of each endpoint receiving webhooks in this environment."
-      >
-        {endpoints.loading ? (
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-          </div>
-        ) : (
-          <ul className="flex flex-col divide-y divide-border">
-            {(endpoints.data ?? []).map((endpoint) => (
-              <li
-                key={endpoint.id}
-                className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
-              >
-                <span className="truncate text-sm font-medium text-foreground">
-                  {endpoint.name}
-                </span>
-                <span className="flex items-center gap-3">
-                  {endpoint.backlogCount > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      Backlog {formatCount(endpoint.backlogCount)}
-                    </span>
-                  )}
-                  <EndpointHealthBadge health={endpoint.health} />
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-      {(incidents.data?.length ?? 0) > 0 && (
-        <Panel
-          title="Platform notices"
-          description="Active notices from Helio that may affect webhook delivery."
+
+      {loading && <OverviewSkeleton />}
+
+      {!loading && error && (
+        <EmptyState
+          icon={AlertCircle}
+          title="Couldn't load overview data"
+          description="Something went wrong while loading telemetry for this environment."
         >
-          <ul className="flex flex-col gap-2">
-            {incidents.data!.map((incident) => (
-              <li key={incident.id} className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{incident.title}.</span>{" "}
-                {incident.summary}
-              </li>
-            ))}
-          </ul>
-        </Panel>
+          <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
+            Retry
+          </Button>
+        </EmptyState>
       )}
-      <PlaceholderPanel
-        icon={Gauge}
-        title="Reliability dashboard"
-        items={[
-          "Success-rate and latency trends per endpoint",
-          "Failure-cluster highlights with direct links to affected deliveries",
-          "Backlog and retry-queue depth over time",
-        ]}
-      />
+
+      {!loading && !error && data && data.endpoints.length === 0 && (
+        <EmptyState
+          icon={Inbox}
+          title="No endpoints in this environment"
+          description="Once an endpoint is receiving webhooks here, its health and delivery telemetry will appear on this page."
+        />
+      )}
+
+      {!loading && !error && data && data.endpoints.length > 0 && (
+        <>
+          <OperationalSummary data={data} />
+
+          <MetricStrip metrics={data.metrics} />
+
+          <Panel
+            title="Delivery health trend"
+            description={`Delivery outcomes across ${timeRangeLabels[timeRange].toLowerCase()}, ending at the latest telemetry timestamp.`}
+          >
+            <TrendChart trend={data.trend} timeRange={timeRange} />
+          </Panel>
+
+          <Panel
+            title="Endpoint health"
+            description="Endpoints needing attention are listed first. Select an endpoint to open its detail page."
+          >
+            <EndpointHealthTable rows={data.endpoints} />
+          </Panel>
+
+          <Panel
+            title="Observed failure patterns"
+            description="Failure clusters observed in the selected range, ranked by affected deliveries. These are evidence, not a root-cause determination."
+          >
+            <FailureClusterList rows={data.clusters} endpointNames={endpointNames} />
+          </Panel>
+
+          <Panel
+            title="Helio platform status"
+            description="Provider-side notices are separate from the health of your own endpoints."
+          >
+            {data.deliveryIncidents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No active Helio platform incidents are affecting webhook delivery in this
+                environment.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {data.deliveryIncidents.map((incident) => (
+                  <li key={incident.id} className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">
+                        {incident.title}
+                      </span>
+                      <IncidentSeverityBadge severity={incident.severity} />
+                    </div>
+                    <p className="text-sm text-muted-foreground">{incident.summary}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Started {formatDateTime(incident.startedAt)} · This notice does not
+                      establish the cause of the endpoint-level failures shown above.
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </>
+      )}
     </>
   )
 }

@@ -1,5 +1,8 @@
 import type {
   AuditActorType,
+  FailureClusterActivity,
+  OverviewTimeRange,
+  TelemetryState,
   DeliveryStatus,
   EndpointHealth,
   EndpointStatus,
@@ -81,4 +84,27 @@ export const auditActorTypeLabels: Record<AuditActorType, string> = {
   user: "User",
   system: "System",
   support: "Support",
+}
+
+export const timeRangeLabels: Record<OverviewTimeRange, string> = {
+  "6h": "Last 6 hours",
+  "24h": "Last 24 hours",
+  "7d": "Last 7 days",
+}
+
+export const timeRangeShortLabels: Record<OverviewTimeRange, string> = {
+  "6h": "6h",
+  "24h": "24h",
+  "7d": "7d",
+}
+
+export const telemetryStateLabels: Record<TelemetryState, string> = {
+  current: "Current",
+  stale: "Stale",
+  insufficient: "Insufficient data",
+}
+
+export const clusterActivityLabels: Record<FailureClusterActivity, string> = {
+  active: "Active",
+  historical: "Historical",
 }

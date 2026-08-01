@@ -47,7 +47,7 @@ function WorkspaceSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="max-w-56 gap-1.5 px-2 font-medium">
+        <Button variant="ghost" size="sm" className="min-w-0 max-w-56 shrink gap-1.5 px-2 font-medium">
           <Building2 className="size-4 text-muted-foreground" aria-hidden="true" />
           <span className="truncate">{workspace?.name ?? "…"}</span>
           <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -203,8 +203,8 @@ function UserMenu() {
               {user?.avatarInitials ?? "…"}
             </AvatarFallback>
           </Avatar>
-          <span className="hidden text-sm font-medium md:inline">{user?.name ?? "…"}</span>
-          <ChevronDown className="hidden size-3.5 text-muted-foreground md:inline" aria-hidden="true" />
+          <span className="hidden text-sm font-medium xl:inline">{user?.name ?? "…"}</span>
+          <ChevronDown className="hidden size-3.5 text-muted-foreground xl:inline" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
@@ -248,14 +248,14 @@ export function TopBar() {
       <WorkspaceSelector />
       <EnvironmentSelector />
       {isProduction && (
-        <span className="hidden items-center gap-1 text-xs font-medium text-destructive sm:flex">
+        <span className="hidden items-center gap-1 text-xs font-medium text-destructive lg:flex">
           <ShieldAlert className="size-3.5" aria-hidden="true" />
           Live environment
         </span>
       )}
       <div className="ml-auto flex items-center gap-1">
         <GlobalSearch />
-        <Button variant="ghost" size="sm" className="hidden gap-1.5 text-muted-foreground md:flex" asChild>
+        <Button variant="ghost" size="sm" className="hidden gap-1.5 text-muted-foreground lg:flex" asChild>
           <Link to="/developers">
             <BookOpen className="size-4" aria-hidden="true" />
             Docs

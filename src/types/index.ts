@@ -179,6 +179,80 @@ export interface FailureCluster {
   sampleDeliveryIds: string[]
 }
 
+export type OverviewTimeRange = "6h" | "24h" | "7d"
+
+export type TelemetryState = "current" | "stale" | "insufficient"
+
+export type FailureClusterActivity = "active" | "historical"
+
+export interface TelemetrySnapshot {
+  state: TelemetryState
+  latestAt: string | null
+}
+
+// Aggregate counts for a (environment, time range) window. Success rate is
+// derived from these counts rather than stored, so figures always reconcile.
+export interface DeliveryMetricCounts {
+  eventsReceived: number
+  deliveryAttempts: number
+  deliveriesSucceeded: number
+  exhaustedDeliveries: number
+  unknownOutcomes: number
+  retryBacklog: number
+  p95LatencyMs: number | null
+}
+
+export interface DeliveryMetricSummary extends DeliveryMetricCounts {
+  unsuccessfulAttempts: number
+  successRatePct: number | null
+}
+
+export interface DeliveryTrendBucket {
+  bucketStart: string
+  label: string
+  succeeded: number
+  unsuccessful: number
+}
+
+export interface EndpointMetricSnapshot {
+  endpointId: string
+  deliveryAttempts: number
+  deliveriesSucceeded: number
+  p95LatencyMs: number | null
+  backlogCount: number
+  lastActivityAt: string | null
+}
+
+export interface FailureClusterSnapshot {
+  clusterId: string
+  deliveryCount: number
+  firstSeenAt: string
+  lastSeenAt: string
+  activity: FailureClusterActivity
+}
+
+export interface OverviewEndpointRow {
+  endpoint: Endpoint
+  metrics: EndpointMetricSnapshot
+  successRatePct: number | null
+}
+
+export interface OverviewClusterRow {
+  cluster: FailureCluster
+  snapshot: FailureClusterSnapshot
+}
+
+export interface OverviewData {
+  environment: Environment
+  timeRange: OverviewTimeRange
+  telemetry: TelemetrySnapshot
+  metrics: DeliveryMetricSummary
+  trend: DeliveryTrendBucket[]
+  endpoints: OverviewEndpointRow[]
+  clusters: OverviewClusterRow[]
+  deliveryIncidents: PlatformIncident[]
+}
+
 export interface ReplayJob {
   id: string
   workspaceId: string
@@ -223,6 +297,7 @@ export interface PlatformIncident {
   severity: IncidentSeverity
   status: IncidentStatus
   affectsReplay: boolean
+  affectsDelivery: boolean
   affectedEnvironments: Environment[]
   summary: string
   startedAt: string
