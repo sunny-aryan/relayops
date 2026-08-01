@@ -1,3 +1,4 @@
+import { getEndpointTelemetry } from "@/data/endpoints"
 import type {
   DeliveryMetricCounts,
   DeliveryTrendBucket,
@@ -9,14 +10,12 @@ import type {
 } from "@/types"
 
 // Aggregate telemetry for the Overview page, keyed by environment and time
-// range. These are window-level rollups; the delivery records in fixtures.ts
-// are a small representative sample, not the full population behind these
-// counts.
+// range. The per-endpoint operational snapshots are derived from the
+// canonical endpoint telemetry in endpoints.ts, not duplicated here.
 export interface OverviewTelemetryFixture {
   telemetry: TelemetrySnapshot
   counts: DeliveryMetricCounts
   trend: DeliveryTrendBucket[]
-  endpointMetrics: EndpointMetricSnapshot[]
   clusterSnapshots: FailureClusterSnapshot[]
 }
 
@@ -30,46 +29,25 @@ const sandboxTelemetry: TelemetrySnapshot = {
   latestAt: "2026-07-31T07:45:00Z",
 }
 
-const productionEndpointActivity: Record<string, string> = {
-  ep_order_lifecycle: "2026-07-31T07:58:41Z",
-  ep_billing_sync: "2026-07-31T07:52:18Z",
-  ep_customer_updates: "2026-07-31T07:44:09Z",
-}
+// The canonical endpoint IDs per environment, used to derive Overview
+// endpoint snapshots from the canonical per-endpoint telemetry.
+export const productionEndpointIds = ["ep_order_lifecycle", "ep_billing_sync", "ep_customer_updates"]
+export const sandboxEndpointIds = ["ep_local_dev", "ep_qa_automation"]
 
-function prodEndpointMetrics(
-  rows: Array<[id: string, attempts: number, succeeded: number, p95: number, backlog: number]>
-): EndpointMetricSnapshot[] {
-  return rows.map(([endpointId, deliveryAttempts, deliveriesSucceeded, p95LatencyMs, backlogCount]) => ({
-    endpointId,
-    deliveryAttempts,
-    deliveriesSucceeded,
-    p95LatencyMs,
-    backlogCount,
-    lastActivityAt: productionEndpointActivity[endpointId],
-  }))
-}
-
-const qaAutomationMetrics: EndpointMetricSnapshot = {
-  endpointId: "ep_qa_automation",
-  deliveryAttempts: 0,
-  deliveriesSucceeded: 0,
-  p95LatencyMs: null,
-  backlogCount: 0,
-  lastActivityAt: null,
-}
-
-function localDevMetrics(
-  deliveryAttempts: number,
-  deliveriesSucceeded: number,
-  p95LatencyMs: number
-): EndpointMetricSnapshot {
+export function getEndpointMetricSnapshot(
+  endpointId: string,
+  environment: Environment,
+  timeRange: OverviewTimeRange
+): EndpointMetricSnapshot | null {
+  const fixture = getEndpointTelemetry(endpointId, environment, timeRange)
+  if (!fixture) return null
   return {
-    endpointId: "ep_local_dev",
-    deliveryAttempts,
-    deliveriesSucceeded,
-    p95LatencyMs,
-    backlogCount: 7,
-    lastActivityAt: "2026-07-31T07:48:33Z",
+    endpointId,
+    deliveryAttempts: fixture.counts.deliveryAttempts,
+    deliveriesSucceeded: fixture.counts.deliveriesSucceeded,
+    p95LatencyMs: fixture.counts.p95LatencyMs,
+    backlogCount: fixture.counts.retryBacklog,
+    lastActivityAt: fixture.lastActivityAt,
   }
 }
 
@@ -97,11 +75,6 @@ export const overviewTelemetry: Record<
         { bucketStart: "2026-07-31T06:00:00Z", label: "06:00", succeeded: 738, unsuccessful: 25 },
         { bucketStart: "2026-07-31T07:00:00Z", label: "07:00", succeeded: 787, unsuccessful: 31 },
       ],
-      endpointMetrics: prodEndpointMetrics([
-        ["ep_order_lifecycle", 1610, 1609, 275, 0],
-        ["ep_billing_sync", 1415, 1312, 6300, 43],
-        ["ep_customer_updates", 843, 841, 655, 2],
-      ]),
       clusterSnapshots: [
         {
           clusterId: "fc_billing_timeout",
@@ -151,11 +124,6 @@ export const overviewTelemetry: Record<
         { bucketStart: "2026-07-31T04:00:00Z", label: "04:00", succeeded: 1335, unsuccessful: 44 },
         { bucketStart: "2026-07-31T06:00:00Z", label: "06:00", succeeded: 1544, unsuccessful: 57 },
       ],
-      endpointMetrics: prodEndpointMetrics([
-        ["ep_order_lifecycle", 7150, 7147, 280, 0],
-        ["ep_billing_sync", 5500, 5381, 5100, 43],
-        ["ep_customer_updates", 2410, 2403, 640, 2],
-      ]),
       clusterSnapshots: [
         {
           clusterId: "fc_billing_timeout",
@@ -200,11 +168,6 @@ export const overviewTelemetry: Record<
         { bucketStart: "2026-07-29T08:00:00Z", label: "Jul 29", succeeded: 14825, unsuccessful: 45 },
         { bucketStart: "2026-07-30T08:00:00Z", label: "Jul 30", succeeded: 14931, unsuccessful: 129 },
       ],
-      endpointMetrics: prodEndpointMetrics([
-        ["ep_order_lifecycle", 49850, 49828, 285, 0],
-        ["ep_billing_sync", 37980, 37638, 3400, 43],
-        ["ep_customer_updates", 16615, 16570, 630, 2],
-      ]),
       clusterSnapshots: [
         {
           clusterId: "fc_billing_timeout",
@@ -257,7 +220,6 @@ export const overviewTelemetry: Record<
         { bucketStart: "2026-07-31T06:00:00Z", label: "06:00", succeeded: 12, unsuccessful: 4 },
         { bucketStart: "2026-07-31T07:00:00Z", label: "07:00", succeeded: 14, unsuccessful: 4 },
       ],
-      endpointMetrics: [localDevMetrics(128, 92, 4950), qaAutomationMetrics],
       clusterSnapshots: [
         {
           clusterId: "fc_localdev_401",
@@ -300,7 +262,6 @@ export const overviewTelemetry: Record<
         { bucketStart: "2026-07-31T04:00:00Z", label: "04:00", succeeded: 52, unsuccessful: 19 },
         { bucketStart: "2026-07-31T06:00:00Z", label: "06:00", succeeded: 62, unsuccessful: 19 },
       ],
-      endpointMetrics: [localDevMetrics(500, 362, 4800), qaAutomationMetrics],
       clusterSnapshots: [
         {
           clusterId: "fc_localdev_401",
@@ -338,7 +299,6 @@ export const overviewTelemetry: Record<
         { bucketStart: "2026-07-29T08:00:00Z", label: "Jul 29", succeeded: 144, unsuccessful: 430 },
         { bucketStart: "2026-07-30T08:00:00Z", label: "Jul 30", succeeded: 362, unsuccessful: 138 },
       ],
-      endpointMetrics: [localDevMetrics(3150, 2441, 4100), qaAutomationMetrics],
       clusterSnapshots: [
         {
           clusterId: "fc_localdev_401",

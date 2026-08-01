@@ -16,27 +16,41 @@ function plural(count: number, singular: string, pluralWord?: string): string {
 }
 
 export function OperationalSummary({ data }: { data: OverviewData }) {
-  const active = data.endpoints.filter((r) => r.endpoint.status !== "disabled")
   const disabled = data.endpoints.filter((r) => r.endpoint.status === "disabled")
-  const attention = active.filter(
-    (r) => r.endpoint.health === "degraded" || r.endpoint.health === "failing"
+  const active = data.endpoints.filter((r) => r.endpoint.status !== "disabled")
+  const evaluated = active.filter((r) => r.metrics !== null)
+  const unevaluated = active.filter((r) => r.metrics === null)
+  const attention = evaluated.filter(
+    (r) =>
+      r.endpoint.health === "degraded" ||
+      r.endpoint.health === "failing" ||
+      r.endpoint.health === "stale"
   )
-  const failing = attention.filter((r) => r.endpoint.health === "failing")
-  const healthy = active.filter((r) => r.endpoint.health === "healthy")
+  const failing = evaluated.filter((r) => r.endpoint.health === "failing")
+  const healthy = evaluated.filter((r) => r.endpoint.health === "healthy")
 
-  const headline =
-    failing.length > 0
-      ? "Webhook delivery is failing"
-      : attention.length > 0
-        ? "Webhook delivery is degraded"
-        : "Webhook delivery is operating normally"
+  let headline: string
+  let tone: StatusTone
 
-  const tone: StatusTone =
-    failing.length > 0 ? "danger" : attention.length > 0 ? "warning" : "success"
+  if (failing.length > 0) {
+    headline = "Webhook delivery is failing"
+    tone = "danger"
+  } else if (attention.length > 0) {
+    headline = "Webhook delivery is degraded"
+    tone = "warning"
+  } else if (unevaluated.length > 0) {
+    headline = "Webhook delivery health is incomplete"
+    tone = "neutral"
+  } else {
+    headline = "Webhook delivery is operating normally"
+    tone = "success"
+  }
 
-  const HeadlineIcon = tone === "success" ? CheckCircle2 : AlertTriangle
+  const HeadlineIcon =
+    tone === "success" ? CheckCircle2 : tone === "neutral" ? Clock : AlertTriangle
 
   const attentionNames = attention.map((r) => r.endpoint.name).join(", ")
+  const unevaluatedNames = unevaluated.map((r) => r.endpoint.name).join(", ")
 
   return (
     <section
@@ -53,7 +67,9 @@ export function OperationalSummary({ data }: { data: OverviewData }) {
                   ? "size-4 text-destructive"
                   : tone === "warning"
                     ? "size-4 text-warning"
-                    : "size-4 text-success"
+                    : tone === "neutral"
+                      ? "size-4 text-muted-foreground"
+                      : "size-4 text-success"
               }
             />
             <h2 className="text-sm font-semibold text-foreground">{headline}</h2>
@@ -61,14 +77,21 @@ export function OperationalSummary({ data }: { data: OverviewData }) {
           <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
             {attention.length > 0 && (
               <li>
-                {attention.length} of {active.length} active{" "}
-                {plural(active.length, "endpoint")} {plural(attention.length, "needs", "need")}{" "}
+                {attention.length} of {evaluated.length} evaluated{" "}
+                {plural(evaluated.length, "endpoint")} {plural(attention.length, "needs", "need")}{" "}
                 attention — {failing.length > 0 ? "failures are" : "degradation is"} concentrated
                 in <span className="font-medium text-foreground">{attentionNames}</span>.
               </li>
             )}
+            {unevaluated.length > 0 && (
+              <li>
+                {unevaluatedNames} {plural(unevaluated.length, "has", "have")} insufficient
+                telemetry and {plural(unevaluated.length, "is", "are")} excluded from evaluated
+                endpoint-health counts.
+              </li>
+            )}
             <li>
-              {healthy.length} active {plural(healthy.length, "endpoint")}{" "}
+              {healthy.length} evaluated {plural(healthy.length, "endpoint")}{" "}
               {plural(healthy.length, "is", "are")} operating normally.
             </li>
             {disabled.length > 0 && (

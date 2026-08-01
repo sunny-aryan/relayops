@@ -15,13 +15,19 @@ import {
   users,
   workspace,
 } from "@/data/fixtures"
-import { overviewTelemetry } from "@/data/overview"
+import { getEndpointTelemetry } from "@/data/endpoints"
+import { getEndpointMetricSnapshot, overviewTelemetry } from "@/data/overview"
 import type {
   ApiKeyMetadata,
   AuditEvent,
   Delivery,
   DeliveryAttempt,
+  DeliveryMetricSummary,
+  DeliveryTrendBucket,
   Endpoint,
+  EndpointDetailData,
+  EndpointInventoryRow,
+  EndpointMetricSnapshot,
   Environment,
   Event,
   FailureCluster,
@@ -33,6 +39,7 @@ import type {
   OverviewTimeRange,
   ReplayJob,
   ReplayJobItem,
+  TelemetrySnapshot,
   UsageBucket,
   User,
   Workspace,
@@ -150,6 +157,15 @@ function successRate(succeeded: number, attempts: number): number | null {
   return (succeeded / attempts) * 100
 }
 
+function buildEndpointSnapshot(
+  endpoint: Endpoint,
+  environment: Environment,
+  timeRange: OverviewTimeRange
+): EndpointMetricSnapshot | null {
+  if (endpoint.status === "disabled") return null
+  return getEndpointMetricSnapshot(endpoint.id, environment, timeRange)
+}
+
 export function getOverview(
   environment: Environment,
   timeRange: OverviewTimeRange
@@ -159,21 +175,15 @@ export function getOverview(
   const endpointRows: OverviewEndpointRow[] = endpoints
     .filter((e) => e.environment === environment)
     .map((endpoint) => {
-      const metrics = fixture.endpointMetrics.find((m) => m.endpointId === endpoint.id) ?? {
-        endpointId: endpoint.id,
-        deliveryAttempts: 0,
-        deliveriesSucceeded: 0,
-        p95LatencyMs: null,
-        backlogCount: 0,
-        lastActivityAt: null,
-      }
+      const metrics = buildEndpointSnapshot(endpoint, environment, timeRange)
+      const disabled = endpoint.status === "disabled"
+      const noMetrics = disabled || !metrics
       return {
         endpoint,
         metrics,
-        successRatePct:
-          endpoint.status === "disabled"
-            ? null
-            : successRate(metrics.deliveriesSucceeded, metrics.deliveryAttempts),
+        successRatePct: noMetrics
+          ? null
+          : successRate(metrics!.deliveriesSucceeded, metrics!.deliveryAttempts),
       }
     })
     .sort(
@@ -208,6 +218,91 @@ export function getOverview(
         i.affectsDelivery &&
         i.affectedEnvironments.includes(environment)
     ),
+  }
+
+  return new Promise((res) => setTimeout(() => res(data), 150))
+}
+
+export function listEndpointInventory(
+  environment: Environment
+): Promise<EndpointInventoryRow[]> {
+  const rows: EndpointInventoryRow[] = endpoints
+    .filter((e) => e.environment === environment)
+    .map((endpoint) => {
+      const metrics = buildEndpointSnapshot(endpoint, environment, "24h")
+      return {
+        endpoint,
+        metrics,
+        successRatePct:
+          endpoint.status === "disabled" || !metrics
+            ? null
+            : successRate(metrics.deliveriesSucceeded, metrics.deliveryAttempts),
+      }
+    })
+    .sort(
+      (a, b) =>
+        attentionHealthOrder[a.endpoint.health] - attentionHealthOrder[b.endpoint.health]
+    )
+
+  return new Promise((res) => setTimeout(() => res(rows), 120))
+}
+
+export function getEndpointDetail(
+  environment: Environment,
+  endpointId: string,
+  timeRange: OverviewTimeRange
+): Promise<EndpointDetailData | null> {
+  const endpoint = endpoints.find((e) => e.id === endpointId && e.environment === environment)
+  if (!endpoint) return resolve(null)
+
+  const disabled = endpoint.status === "disabled"
+  const fixture = disabled ? null : getEndpointTelemetry(endpoint.id, environment, timeRange)
+
+  let telemetry: TelemetrySnapshot
+  let metrics: DeliveryMetricSummary | null = null
+  let trend: DeliveryTrendBucket[] = []
+
+  if (disabled) {
+    telemetry = { state: "insufficient", latestAt: null }
+  } else if (!fixture) {
+    telemetry = { state: "insufficient", latestAt: null }
+  } else {
+    telemetry = {
+      state: fixture.lastActivityAt ? "current" : "insufficient",
+      latestAt: fixture.lastActivityAt,
+    }
+    const { counts } = fixture
+    metrics = {
+      ...counts,
+      unsuccessfulAttempts: counts.deliveryAttempts - counts.deliveriesSucceeded,
+      successRatePct:
+        counts.deliveryAttempts === 0
+          ? null
+          : (counts.deliveriesSucceeded / counts.deliveryAttempts) * 100,
+    }
+    trend = fixture.trend
+  }
+
+  const overviewFixture = overviewTelemetry[environment][timeRange]
+  const clusterRows: OverviewClusterRow[] = overviewFixture.clusterSnapshots
+    .map((snapshot) => {
+      const cluster = failureClusters.find((c) => c.id === snapshot.clusterId)
+      return cluster &&
+        cluster.environment === environment &&
+        cluster.endpointId === endpoint.id
+        ? { cluster, snapshot }
+        : null
+    })
+    .filter((row): row is OverviewClusterRow => row !== null)
+    .sort((a, b) => b.snapshot.deliveryCount - a.snapshot.deliveryCount)
+
+  const data: EndpointDetailData = {
+    endpoint,
+    timeRange,
+    telemetry,
+    metrics,
+    trend,
+    clusters: clusterRows,
   }
 
   return new Promise((res) => setTimeout(() => res(data), 150))

@@ -118,12 +118,14 @@ export interface Endpoint {
   status: EndpointStatus
   health: EndpointHealth
   subscribedEventTypes: EventType[]
-  successRatePct: number | null
-  p95LatencyMs: number | null
-  backlogCount: number
-  telemetryFreshAsOf: string | null
   signingKeyMasked: string
+  signingEnabled: boolean
+  signingAlgorithm: string
+  apiVersion: string
+  retryMaxAttempts: number
+  retryBackoffStrategy: string
   createdAt: string
+  updatedAt: string
   disabledAt: string | null
   disabledReason: string | null
 }
@@ -233,7 +235,7 @@ export interface FailureClusterSnapshot {
 
 export interface OverviewEndpointRow {
   endpoint: Endpoint
-  metrics: EndpointMetricSnapshot
+  metrics: EndpointMetricSnapshot | null
   successRatePct: number | null
 }
 
@@ -251,6 +253,21 @@ export interface OverviewData {
   endpoints: OverviewEndpointRow[]
   clusters: OverviewClusterRow[]
   deliveryIncidents: PlatformIncident[]
+}
+
+export interface EndpointDetailData {
+  endpoint: Endpoint
+  timeRange: OverviewTimeRange
+  telemetry: TelemetrySnapshot
+  metrics: DeliveryMetricSummary | null
+  trend: DeliveryTrendBucket[]
+  clusters: OverviewClusterRow[]
+}
+
+export interface EndpointInventoryRow {
+  endpoint: Endpoint
+  metrics: EndpointMetricSnapshot | null
+  successRatePct: number | null
 }
 
 export interface ReplayJob {

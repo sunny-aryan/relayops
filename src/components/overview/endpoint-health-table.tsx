@@ -47,6 +47,7 @@ export function EndpointHealthTable({ rows }: { rows: OverviewEndpointRow[] }) {
         <tbody>
           {rows.map(({ endpoint, metrics, successRatePct }) => {
             const disabled = endpoint.status === "disabled"
+            const noMetrics = disabled || !metrics
             return (
               <tr
                 key={endpoint.id}
@@ -80,38 +81,40 @@ export function EndpointHealthTable({ rows }: { rows: OverviewEndpointRow[] }) {
                 <td className="py-2.5 pr-3">
                   {disabled ? (
                     <span className="text-xs text-muted-foreground">Not evaluated</span>
+                  ) : noMetrics ? (
+                    <span className="text-xs text-muted-foreground">Insufficient telemetry</span>
                   ) : (
                     <EndpointHealthBadge health={endpoint.health} />
                   )}
                 </td>
                 <td className="hidden py-2.5 pr-3 text-right font-mono text-xs tabular-nums sm:table-cell">
-                  {disabled ? (
+                  {noMetrics ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
                     formatPercent(successRatePct)
                   )}
                 </td>
                 <td className="hidden py-2.5 pr-3 text-right font-mono text-xs tabular-nums md:table-cell">
-                  {disabled ? (
+                  {noMetrics ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
-                    formatLatency(metrics.p95LatencyMs)
+                    formatLatency(metrics!.p95LatencyMs)
                   )}
                 </td>
                 <td
                   className={cn(
                     "hidden py-2.5 pr-3 text-right font-mono text-xs tabular-nums md:table-cell",
-                    !disabled && metrics.backlogCount > 0 && "text-warning"
+                    !noMetrics && metrics!.backlogCount > 0 && "text-warning"
                   )}
                 >
-                  {disabled ? (
+                  {noMetrics ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
-                    formatCount(metrics.backlogCount)
+                    formatCount(metrics!.backlogCount)
                   )}
                 </td>
                 <td className="hidden py-2.5 text-right text-xs text-muted-foreground lg:table-cell">
-                  {metrics.lastActivityAt ? formatDateTime(metrics.lastActivityAt) : "—"}
+                  {metrics?.lastActivityAt ? formatDateTime(metrics.lastActivityAt) : "—"}
                 </td>
               </tr>
             )
