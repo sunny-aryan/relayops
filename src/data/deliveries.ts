@@ -1,5 +1,6 @@
 import type {
   DeliveryAttemptRecord,
+  DeliveryAssessmentFacts,
   DeliveryDetailAggregate,
   DeliveryEndpointContext,
   DeliveryEventContext,
@@ -867,6 +868,49 @@ export function getDeliveryDetail(
     endpoint: endpointContext,
     environment,
     attempts,
+  }
+}
+
+export function getDeliveryAssessmentFacts(
+  environment: Environment,
+  deliveryId: string
+): DeliveryAssessmentFacts | null {
+  const spec = deliverySpecs.find((s) => s.id === deliveryId && s.environment === environment)
+  if (!spec) return null
+
+  const record = buildDeliveryRecord(spec)
+  const attempts = spec.attempts.map((a) => buildAttemptRecord(spec.id, a))
+
+  const event = events.find((e) => e.id === spec.eventId && e.environment === environment) ?? null
+  const endpoint = endpoints.find((e) => e.id === spec.endpointId && e.environment === environment) ?? null
+
+  const eventContext: DeliveryEventContext | null = event
+    ? {
+        eventId: event.id,
+        eventType: event.type,
+        resourceId: event.resourceId,
+        payloadState: event.payloadState,
+        payloadSummary: event.payloadSummary,
+        occurredAt: event.occurredAt,
+      }
+    : null
+
+  const endpointContext: DeliveryEndpointContext | null = endpoint
+    ? {
+        endpointId: endpoint.id,
+        name: endpoint.name,
+        maskedUrl: endpoint.maskedUrl,
+        environment: endpoint.environment,
+      }
+    : null
+
+  return {
+    delivery: record,
+    attempts,
+    event: eventContext,
+    endpoint: endpointContext,
+    endpointStatus: endpoint?.status ?? null,
+    endpointRetryMaxAttempts: endpoint?.retryMaxAttempts ?? null,
   }
 }
 

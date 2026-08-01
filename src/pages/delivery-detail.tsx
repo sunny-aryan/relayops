@@ -2,6 +2,7 @@ import { useState } from "react"
 import { ArrowLeft, Clock, Copy, Check, FileText } from "lucide-react"
 import { Link, useParams, useSearchParams } from "react-router-dom"
 
+import { DeliveryAssessmentSection } from "@/components/delivery/assessment-section"
 import { Mono, MonoPlain } from "@/components/shared/mono"
 import { PageHeader } from "@/components/shared/page-header"
 import { Panel } from "@/components/shared/panel"
@@ -23,7 +24,7 @@ import { sanitizeExplorerParams } from "@/lib/delivery-filters"
 import { cn } from "@/lib/utils"
 import type {
   DeliveryAttemptRecord,
-  DeliveryDetailAggregate,
+  DeliveryDetailAssessmentAggregate,
   DeliveryState,
 } from "@/types"
 
@@ -100,7 +101,7 @@ export function DeliveryDetailPage() {
   return <DeliveryDetail data={data} backHref={backHref} />
 }
 
-function DeliveryDetail({ data, backHref }: { data: DeliveryDetailAggregate; backHref: string }) {
+function DeliveryDetail({ data, backHref }: { data: DeliveryDetailAssessmentAggregate; backHref: string }) {
   const { delivery, event, endpoint, attempts } = data
   const [selectedAttempt, setSelectedAttempt] = useState(attempts.length - 1)
   const [copied, setCopied] = useState(false)
@@ -213,6 +214,16 @@ function DeliveryDetail({ data, backHref }: { data: DeliveryDetailAggregate; bac
           {stateExplanation(delivery.state, delivery.succeededAfterRetry)}
         </p>
       </Panel>
+
+      {/* Operational assessment */}
+      {data.assessment && <DeliveryAssessmentSection assessment={data.assessment} operatorName={data.operatorName} />}
+      {!data.assessment && (
+        <Panel title="Operational assessment">
+          <p className="text-sm text-muted-foreground">
+            Assessment unavailable. Required delivery or endpoint references could not be resolved.
+          </p>
+        </Panel>
+      )}
 
       {/* Timeline */}
       <Panel title="Attempt timeline" description="Chronological record of every delivery attempt.">

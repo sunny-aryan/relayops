@@ -16,14 +16,16 @@ import {
 import { getEndpointTelemetry } from "@/data/endpoints"
 import {
   getDeliveryDetail as getDeliveryDetailFromFixtures,
+  getDeliveryAssessmentFacts,
   getDeliveryEndpointOptions,
   listDeliveries as listDeliveriesFromFixtures,
 } from "@/data/deliveries"
 import { getEndpointMetricSnapshot, overviewTelemetry } from "@/data/overview"
+import { assessDelivery } from "@/domain/delivery-assessment"
 import type {
   ApiKeyMetadata,
   AuditEvent,
-  DeliveryDetailAggregate,
+  DeliveryDetailAssessmentAggregate,
   DeliveryFilters,
   DeliveryListResult,
   DeliveryMetricSummary,
@@ -43,6 +45,7 @@ import type {
   OverviewTimeRange,
   ReplayJob,
   ReplayJobItem,
+  Role,
   TelemetrySnapshot,
   UsageBucket,
   User,
@@ -306,8 +309,61 @@ export function listDeliveryRecords(
 export function getDeliveryDetailRecord(
   environment: Environment,
   deliveryId: string
-): Promise<DeliveryDetailAggregate | null> {
-  const result = getDeliveryDetailFromFixtures(environment, deliveryId)
+): Promise<DeliveryDetailAssessmentAggregate | null> {
+  const base = getDeliveryDetailFromFixtures(environment, deliveryId)
+  if (!base) return resolve(null)
+
+  const membership = memberships.find(
+    (m) => m.userId === activeUserId && m.workspaceId === workspace.id
+  )
+  const operatorRole: Role = membership?.role ?? "observer"
+  const operatorName = users.find((u) => u.id === activeUserId)?.name ?? "Unknown"
+
+  const facts = getDeliveryAssessmentFacts(environment, deliveryId)
+  if (!facts) {
+    const result: DeliveryDetailAssessmentAggregate = {
+      ...base,
+      assessment: null,
+      operatorName,
+      operatorRole,
+    }
+    return new Promise((res) => setTimeout(() => res(result), 150))
+  }
+
+  // Delivery-specific active replay membership through replay-job items
+  const deliveryReplayJobIds = replayJobItems
+    .filter((item) => item.deliveryId === deliveryId)
+    .map((item) => item.replayJobId)
+
+  const activeReplayJobIds = replayJobs
+    .filter(
+      (j) =>
+        j.environment === environment &&
+        deliveryReplayJobIds.includes(j.id) &&
+        (j.status === "queued" || j.status === "running")
+    )
+    .map((j) => j.id)
+
+  const blockingIncidents = platformIncidents.filter(
+    (i) =>
+      i.status !== "resolved" &&
+      i.affectsReplay &&
+      i.affectedEnvironments.includes(environment)
+  )
+
+  const assessment = assessDelivery({
+    ...facts,
+    activeReplayJobIds,
+    blockingIncidents,
+    operatorRole,
+  })
+
+  const result: DeliveryDetailAssessmentAggregate = {
+    ...base,
+    assessment,
+    operatorName,
+    operatorRole,
+  }
   return new Promise((res) => setTimeout(() => res(result), 150))
 }
 

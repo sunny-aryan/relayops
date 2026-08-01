@@ -138,6 +138,119 @@ export interface DeliveryDetailAggregate {
   attempts: DeliveryAttemptRecord[]
 }
 
+// ---- Commit 5: deterministic delivery assessment ----
+
+export type AssessmentClassification =
+  | "delivered"
+  | "delivered_after_retry"
+  | "retrying"
+  | "exhausted_http_503"
+  | "exhausted_http_401"
+  | "exhausted_other"
+  | "outcome_unknown"
+  | "assessment_unavailable"
+
+export type ReplayEligibilityDecision =
+  | "eligible"
+  | "already_succeeded"
+  | "retry_active"
+  | "confirmation_required"
+  | "payload_unavailable"
+  | "endpoint_disabled"
+  | "in_active_replay"
+  | "blocked_by_incident"
+  | "assessment_unavailable"
+
+export type ReplayBlockerReason =
+  | "already_succeeded"
+  | "retry_active"
+  | "confirmation_required"
+  | "payload_expired"
+  | "payload_redacted"
+  | "payload_unavailable"
+  | "endpoint_disabled"
+  | "in_active_replay"
+  | "blocked_by_incident"
+  | "missing_reference"
+
+export interface ReplayBlocker {
+  reason: ReplayBlockerReason
+  ruleId: string
+  explanation: string
+}
+
+export type RecommendedAction =
+  | "no_action"
+  | "allow_retries"
+  | "confirm_receiver_recovery"
+  | "verify_auth_config"
+  | "confirm_downstream"
+  | "review_evidence"
+
+export interface EvidenceFinding {
+  ruleId: string
+  text: string
+}
+
+export type OperatorReplayPermission = "permitted" | "not_permitted"
+
+export interface OperatorPermission {
+  permission: OperatorReplayPermission
+  role: Role
+  ruleId: string
+  explanation: string
+}
+
+export interface ReplayEligibilityResult {
+  decision: ReplayEligibilityDecision
+  ruleId: string
+  explanation: string
+  blockers: ReplayBlocker[]
+  recommendedNow: boolean
+}
+
+export interface DeliveryAssessment {
+  classification: AssessmentClassification
+  headline: string
+  explanation: string
+  evidenceFindings: EvidenceFinding[]
+  recommendedAction: {
+    action: RecommendedAction
+    ruleId: string
+    text: string
+  }
+  replayEligibility: ReplayEligibilityResult
+  operatorPermission: OperatorPermission
+  evaluatedRuleIds: string[]
+}
+
+export interface DeliveryAssessmentFacts {
+  delivery: DeliveryRecord
+  attempts: DeliveryAttemptRecord[]
+  event: DeliveryEventContext | null
+  endpoint: DeliveryEndpointContext | null
+  endpointStatus: EndpointStatus | null
+  endpointRetryMaxAttempts: number | null
+}
+
+export interface DeliveryAssessmentInput {
+  delivery: DeliveryRecord
+  attempts: DeliveryAttemptRecord[]
+  event: DeliveryEventContext | null
+  endpoint: DeliveryEndpointContext | null
+  endpointStatus: EndpointStatus | null
+  endpointRetryMaxAttempts: number | null
+  activeReplayJobIds: string[]
+  blockingIncidents: PlatformIncident[]
+  operatorRole: Role
+}
+
+export interface DeliveryDetailAssessmentAggregate extends DeliveryDetailAggregate {
+  assessment: DeliveryAssessment | null
+  operatorName: string
+  operatorRole: Role
+}
+
 export interface DeliveryFilters {
   search: string
   timeRange: DeliveryTimeRange
