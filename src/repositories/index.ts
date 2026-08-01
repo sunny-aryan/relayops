@@ -2,8 +2,6 @@ import {
   activeUserId,
   apiKeys,
   auditEvents,
-  deliveries,
-  deliveryAttempts,
   endpoints,
   events,
   failureClusters,
@@ -16,12 +14,18 @@ import {
   workspace,
 } from "@/data/fixtures"
 import { getEndpointTelemetry } from "@/data/endpoints"
+import {
+  getDeliveryDetail as getDeliveryDetailFromFixtures,
+  getDeliveryEndpointOptions,
+  listDeliveries as listDeliveriesFromFixtures,
+} from "@/data/deliveries"
 import { getEndpointMetricSnapshot, overviewTelemetry } from "@/data/overview"
 import type {
   ApiKeyMetadata,
   AuditEvent,
-  Delivery,
-  DeliveryAttempt,
+  DeliveryDetailAggregate,
+  DeliveryFilters,
+  DeliveryListResult,
   DeliveryMetricSummary,
   DeliveryTrendBucket,
   Endpoint,
@@ -86,23 +90,6 @@ export function getEndpointById(
   return resolve(
     endpoints.find((e) => e.id === endpointId && e.environment === environment) ?? null
   )
-}
-
-export function listDeliveries(environment: Environment): Promise<Delivery[]> {
-  return resolve(deliveries.filter((d) => d.environment === environment))
-}
-
-export function getDeliveryById(
-  deliveryId: string,
-  environment: Environment
-): Promise<Delivery | null> {
-  return resolve(
-    deliveries.find((d) => d.id === deliveryId && d.environment === environment) ?? null
-  )
-}
-
-export function listDeliveryAttempts(deliveryId: string): Promise<DeliveryAttempt[]> {
-  return resolve(deliveryAttempts.filter((a) => a.deliveryId === deliveryId))
 }
 
 export function getEventById(
@@ -306,4 +293,26 @@ export function getEndpointDetail(
   }
 
   return new Promise((res) => setTimeout(() => res(data), 150))
+}
+
+export function listDeliveryRecords(
+  environment: Environment,
+  filters: DeliveryFilters
+): Promise<DeliveryListResult> {
+  const result = listDeliveriesFromFixtures(environment, filters)
+  return new Promise((res) => setTimeout(() => res(result), 150))
+}
+
+export function getDeliveryDetailRecord(
+  environment: Environment,
+  deliveryId: string
+): Promise<DeliveryDetailAggregate | null> {
+  const result = getDeliveryDetailFromFixtures(environment, deliveryId)
+  return new Promise((res) => setTimeout(() => res(result), 150))
+}
+
+export function listDeliveryEndpointOptions(
+  environment: Environment
+): Promise<{ id: string; name: string }[]> {
+  return resolve(getDeliveryEndpointOptions(environment))
 }

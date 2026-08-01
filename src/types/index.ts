@@ -38,6 +38,122 @@ export type FailureCategory =
   | "dns_failure"
   | "tls_failure"
 
+export type DeliveryState = "delivered" | "retrying" | "exhausted" | "unknown"
+
+export type AttemptResultOutcome = "success" | "confirmed_failure" | "outcome_unknown"
+
+export type ObservedFailureCategory =
+  | "http_400"
+  | "http_401"
+  | "http_404"
+  | "http_409"
+  | "http_429"
+  | "http_500"
+  | "http_503"
+  | "timeout"
+  | "connection_terminated"
+  | "dns_failure"
+  | "tls_failure"
+
+export type DeliveryTimeRange = "6h" | "24h" | "7d"
+
+export type DeliveryStateFilter = "all" | DeliveryState
+
+export interface SanitizedRequestEvidence {
+  method: string
+  maskedUrl: string
+  contentType: string
+  apiVersion: string | null
+  safeHeaders: Record<string, string>
+  sanitizedPayload: string | null
+  payloadTruncated: boolean
+  payloadMalformed: boolean
+}
+
+export interface SanitizedResponseEvidence {
+  httpStatus: number | null
+  safeHeaders: Record<string, string>
+  sanitizedBody: string | null
+  bodyTruncated: boolean
+  transportResult: string | null
+  responseAbsent: boolean
+}
+
+export interface DeliveryAttemptRecord {
+  id: string
+  deliveryId: string
+  attemptNumber: number
+  outcome: AttemptResultOutcome
+  httpStatusCode: number | null
+  observedFailureCategory: ObservedFailureCategory | null
+  responseSummary: string
+  latencyMs: number | null
+  startedAt: string
+  retryDecision: "retry" | "exhausted" | "succeeded" | "no_retry"
+  nextRetryAt: string | null
+  request: SanitizedRequestEvidence
+  response: SanitizedResponseEvidence
+}
+
+export interface DeliveryRecord {
+  id: string
+  eventId: string
+  endpointId: string
+  environment: Environment
+  state: DeliveryState
+  eventType: EventType
+  attemptCount: number
+  maxAttempts: number
+  firstAttemptAt: string
+  lastAttemptAt: string
+  nextRetryAt: string | null
+  latestObservedCategory: ObservedFailureCategory | null
+  observedCategories: ObservedFailureCategory[]
+  latestResponseSummary: string
+  latestLatencyMs: number | null
+  succeededAfterRetry: boolean
+}
+
+export interface DeliveryEventContext {
+  eventId: string
+  eventType: EventType
+  resourceId: string
+  payloadState: PayloadState
+  payloadSummary: string
+  occurredAt: string
+}
+
+export interface DeliveryEndpointContext {
+  endpointId: string
+  name: string
+  maskedUrl: string
+  environment: Environment
+}
+
+export interface DeliveryDetailAggregate {
+  delivery: DeliveryRecord
+  event: DeliveryEventContext | null
+  endpoint: DeliveryEndpointContext | null
+  environment: Environment
+  attempts: DeliveryAttemptRecord[]
+}
+
+export interface DeliveryFilters {
+  search: string
+  timeRange: DeliveryTimeRange
+  endpointId: string | null
+  eventType: EventType | null
+  state: DeliveryStateFilter
+  failureCategory: ObservedFailureCategory | null
+}
+
+export interface DeliveryListResult {
+  records: DeliveryRecord[]
+  loadedCount: number
+  hasMore: boolean
+  totalMatching: number
+}
+
 export type ReplayEligibility =
   | "eligible"
   | "already_succeeded"

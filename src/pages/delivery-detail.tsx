@@ -1,91 +1,174 @@
-import { Stethoscope } from "lucide-react"
-import { Link, useParams } from "react-router-dom"
+import { useState } from "react"
+import { ArrowLeft, Clock, Copy, Check, FileText } from "lucide-react"
+import { Link, useParams, useSearchParams } from "react-router-dom"
 
-import { Mono } from "@/components/shared/mono"
+import { Mono, MonoPlain } from "@/components/shared/mono"
 import { PageHeader } from "@/components/shared/page-header"
-import { PageSkeleton } from "@/components/shared/page-skeleton"
 import { Panel } from "@/components/shared/panel"
-import { PlaceholderPanel } from "@/components/shared/placeholder-panel"
 import { ResourceNotFound } from "@/components/shared/resource-not-found"
-import { DeliveryStatusBadge } from "@/components/shared/status-badge"
+import { StatusBadge, type StatusTone } from "@/components/shared/status-badge"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useApp } from "@/contexts/app-context"
 import { useAsync } from "@/hooks/use-async"
-import { formatDateTime } from "@/lib/format"
-import { failureCategoryLabels, replayEligibilityLabels } from "@/lib/labels"
+import { formatDateTime, formatLatency } from "@/lib/format"
 import {
-  getDeliveryById,
-  getEndpointById,
-  getEventById,
-  listDeliveryAttempts,
-} from "@/repositories"
-import type { Environment } from "@/types"
+  attemptOutcomeLabels,
+  deliveryStateLabels,
+  observedFailureCategoryLabels,
+  retryDecisionLabels,
+} from "@/lib/labels"
+import { getDeliveryDetailRecord, listDeliveryEndpointOptions } from "@/repositories"
+import { sanitizeExplorerParams } from "@/lib/delivery-filters"
+import { cn } from "@/lib/utils"
+import type {
+  DeliveryAttemptRecord,
+  DeliveryDetailAggregate,
+  DeliveryState,
+} from "@/types"
 
-async function loadDelivery(deliveryId: string, environment: Environment) {
-  const delivery = await getDeliveryById(deliveryId, environment)
-  if (!delivery) return null
-  const [event, endpoint, attempts] = await Promise.all([
-    getEventById(delivery.eventId, environment),
-    getEndpointById(delivery.endpointId, environment),
-    listDeliveryAttempts(delivery.id),
-  ])
-  return { delivery, event, endpoint, attempts }
+const stateTones: Record<DeliveryState, StatusTone> = {
+  delivered: "success",
+  retrying: "warning",
+  exhausted: "danger",
+  unknown: "neutral",
+}
+
+function stateExplanation(state: DeliveryState, succeededAfterRetry: boolean): string {
+  switch (state) {
+    case "delivered":
+      return succeededAfterRetry
+        ? "The webhook was accepted successfully after one or more retries. Earlier unsuccessful attempts are retained in the timeline."
+        : "The webhook was accepted successfully on the first attempt."
+    case "retrying":
+      return "Another delivery attempt is scheduled. The latest attempt did not result in confirmed delivery, and the retry policy has not yet reached its limit."
+    case "exhausted":
+      return "The retry policy has reached its configured limit without confirmed delivery. No further automatic retries are scheduled."
+    case "unknown":
+      return "No conclusive receiver outcome was observed. The receiver may have processed the request, but no confirmed response was recorded."
+  }
 }
 
 export function DeliveryDetailPage() {
   const { deliveryId } = useParams<{ deliveryId: string }>()
   const { environment } = useApp()
-  const { data, loading } = useAsync(
-    () => loadDelivery(deliveryId ?? "", environment),
+  const [searchParams] = useSearchParams()
+
+  const { data: endpointOptions } = useAsync(
+    () => listDeliveryEndpointOptions(environment),
+    [environment]
+  )
+
+  const backHref = `/deliveries${(() => {
+    const sanitized = sanitizeExplorerParams(
+      searchParams,
+      (endpointOptions ?? []).map((e) => e.id)
+    )
+    const qs = sanitized.toString()
+    return qs ? `?${qs}` : ""
+  })()}`
+
+  const { data, loading, error } = useAsync(
+    () => getDeliveryDetailRecord(environment, deliveryId ?? ""),
     [deliveryId, environment]
   )
 
-  if (loading) return <PageSkeleton />
+  if (loading) return <Skeleton className="h-96 w-full rounded-lg" />
+
+  if (error) {
+    return (
+      <Panel>
+        <p className="text-sm text-muted-foreground">Couldn't load this delivery.</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()} className="mt-2">
+          Retry
+        </Button>
+      </Panel>
+    )
+  }
 
   if (!data) {
     return (
       <ResourceNotFound
         resourceLabel="Delivery"
         resourceId={deliveryId}
-        backHref="/deliveries"
+        backHref={backHref}
         backLabel="Back to deliveries"
       />
     )
   }
 
+  return <DeliveryDetail data={data} backHref={backHref} />
+}
+
+function DeliveryDetail({ data, backHref }: { data: DeliveryDetailAggregate; backHref: string }) {
   const { delivery, event, endpoint, attempts } = data
+  const [selectedAttempt, setSelectedAttempt] = useState(attempts.length - 1)
+  const [copied, setCopied] = useState(false)
+
+  const attempt = attempts[selectedAttempt]
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
     <>
       <PageHeader
         crumbs={[
-          { label: "Deliveries", href: "/deliveries" },
+          { label: "Deliveries", href: backHref },
           { label: delivery.id },
         ]}
         title={<Mono className="bg-transparent px-0 text-[0.9em]">{delivery.id}</Mono>}
         description={
           event
-            ? `Delivery of ${event.type} to ${endpoint?.name ?? "an endpoint"}.`
+            ? `Delivery of ${event.eventType} to ${endpoint?.name ?? "an endpoint"}.`
             : "Webhook delivery record."
         }
-        meta={<DeliveryStatusBadge status={delivery.status} />}
+        meta={<StatusBadge tone={stateTones[delivery.state]} label={deliveryStateLabels[delivery.state]} />}
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to={backHref}>
+              <ArrowLeft className="size-3.5" />
+              Back to deliveries
+            </Link>
+          </Button>
+        }
       />
+
+      {/* Summary */}
       <Panel title="Delivery summary">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[10rem_1fr]">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[12rem_1fr]">
+          <div className="contents">
+            <dt className="text-sm text-muted-foreground">Delivery state</dt>
+            <dd className="text-sm text-foreground">
+              <StatusBadge tone={stateTones[delivery.state]} label={deliveryStateLabels[delivery.state]} />
+            </dd>
+          </div>
           {event && (
-            <div className="contents">
-              <dt className="text-sm text-muted-foreground">Event</dt>
-              <dd className="min-w-0 text-sm text-foreground">
-                <Mono>{event.type}</Mono>{" "}
-                <span className="text-muted-foreground">— {event.payloadSummary}</span>
-              </dd>
-            </div>
+            <>
+              <div className="contents">
+                <dt className="text-sm text-muted-foreground">Event type</dt>
+                <dd className="text-sm text-foreground">
+                  <Mono className="bg-transparent px-0">{event.eventType}</Mono>
+                </dd>
+              </div>
+              <div className="contents">
+                <dt className="text-sm text-muted-foreground">Event ID</dt>
+                <dd className="text-sm text-foreground">
+                  <MonoPlain className="text-xs">{event.eventId}</MonoPlain>
+                </dd>
+              </div>
+            </>
           )}
           {endpoint && (
             <div className="contents">
               <dt className="text-sm text-muted-foreground">Endpoint</dt>
               <dd className="text-sm">
                 <Link
-                  to={`/endpoints/${endpoint.id}`}
+                  to={`/endpoints/${endpoint.endpointId}`}
                   className="font-medium text-primary underline-offset-4 hover:underline"
                 >
                   {endpoint.name}
@@ -93,83 +176,292 @@ export function DeliveryDetailPage() {
               </dd>
             </div>
           )}
+          {endpoint && (
+            <div className="contents">
+              <dt className="text-sm text-muted-foreground">Destination</dt>
+              <dd className="text-sm text-foreground">
+                <MonoPlain className="text-xs">{endpoint.maskedUrl}</MonoPlain>
+              </dd>
+            </div>
+          )}
+          <div className="contents">
+            <dt className="text-sm text-muted-foreground">Environment</dt>
+            <dd className="text-sm capitalize text-foreground">{delivery.environment}</dd>
+          </div>
+          {event && (
+            <div className="contents">
+              <dt className="text-sm text-muted-foreground">Event received</dt>
+              <dd className="text-sm text-foreground">{formatDateTime(event.occurredAt)}</dd>
+            </div>
+          )}
+          <div className="contents">
+            <dt className="text-sm text-muted-foreground">First attempt</dt>
+            <dd className="text-sm text-foreground">{formatDateTime(delivery.firstAttemptAt)}</dd>
+          </div>
+          <div className="contents">
+            <dt className="text-sm text-muted-foreground">Latest activity</dt>
+            <dd className="text-sm text-foreground">{formatDateTime(delivery.lastAttemptAt)}</dd>
+          </div>
           <div className="contents">
             <dt className="text-sm text-muted-foreground">Attempts</dt>
             <dd className="text-sm text-foreground">
               {delivery.attemptCount} of {delivery.maxAttempts}
             </dd>
           </div>
-          <div className="contents">
-            <dt className="text-sm text-muted-foreground">Last attempt</dt>
-            <dd className="text-sm text-foreground">{formatDateTime(delivery.lastAttemptAt)}</dd>
-          </div>
-          {delivery.nextRetryAt && (
-            <div className="contents">
-              <dt className="text-sm text-muted-foreground">Next retry</dt>
-              <dd className="text-sm text-foreground">{formatDateTime(delivery.nextRetryAt)}</dd>
-            </div>
-          )}
-          {delivery.failureCategory && (
-            <div className="contents">
-              <dt className="text-sm text-muted-foreground">Failure cause</dt>
-              <dd className="text-sm text-foreground">
-                {failureCategoryLabels[delivery.failureCategory]}
-              </dd>
-            </div>
-          )}
-          {delivery.replayEligibility && (
-            <div className="contents">
-              <dt className="text-sm text-muted-foreground">Replay</dt>
-              <dd className="text-sm text-foreground">
-                {replayEligibilityLabels[delivery.replayEligibility]}
-                {delivery.replayJobId && (
-                  <>
-                    {" — "}
-                    <Link
-                      to={`/replays/${delivery.replayJobId}`}
-                      className="font-medium text-primary underline-offset-4 hover:underline"
-                    >
-                      view replay job
-                    </Link>
-                  </>
-                )}
-              </dd>
-            </div>
-          )}
         </dl>
+        <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+          {stateExplanation(delivery.state, delivery.succeededAfterRetry)}
+        </p>
       </Panel>
-      {attempts.length > 0 && (
-        <Panel
-          title="Recorded attempts"
-          description="Attempts captured for this delivery. The full timeline view arrives in a later milestone."
-          contentClassName="p-0"
-        >
-          <ul className="flex flex-col divide-y divide-border">
-            {attempts.map((attempt) => (
-              <li key={attempt.id} className="flex flex-col gap-0.5 px-4 py-2.5">
-                <span className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-                  <span className="font-medium">Attempt {attempt.attemptNumber}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateTime(attempt.startedAt)}
-                  </span>
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {attempt.responseSummary}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-      <PlaceholderPanel
-        icon={Stethoscope}
-        title="Delivery diagnosis"
-        items={[
-          "Full attempt timeline with request and response evidence",
-          "Deterministic diagnosis of the failure cause",
-          "Guided, permission-aware replay workflow",
-        ]}
-      />
+
+      {/* Timeline */}
+      <Panel title="Attempt timeline" description="Chronological record of every delivery attempt.">
+        <ol className="flex flex-col gap-0" aria-label="Delivery attempts">
+          {attempts.map((att, i) => (
+            <AttemptTimelineItem
+              key={att.id}
+              attempt={att}
+              isSelected={i === selectedAttempt}
+              onSelect={() => setSelectedAttempt(i)}
+            />
+          ))}
+        </ol>
+      </Panel>
+
+      {/* Evidence inspector */}
+      <Panel
+        title={`Evidence — attempt ${attempt.attemptNumber}`}
+        description="Sanitized request and response evidence for the selected attempt."
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              copyToClipboard(
+                attempt.request.sanitizedPayload ?? attempt.response.sanitizedBody ?? ""
+              )
+            }
+          >
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          {/* Request evidence */}
+          <div>
+            <h3 className="mb-2 text-xs font-semibold text-muted-foreground">Request</h3>
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
+              <div className="contents">
+                <dt className="text-xs text-muted-foreground">Method</dt>
+                <dd className="text-sm text-foreground">{attempt.request.method}</dd>
+              </div>
+              <div className="contents">
+                <dt className="text-xs text-muted-foreground">URL</dt>
+                <dd className="text-sm text-foreground">
+                  <MonoPlain className="text-xs">{attempt.request.maskedUrl}</MonoPlain>
+                </dd>
+              </div>
+              <div className="contents">
+                <dt className="text-xs text-muted-foreground">Content type</dt>
+                <dd className="text-sm text-foreground">{attempt.request.contentType}</dd>
+              </div>
+              {attempt.request.apiVersion && (
+                <div className="contents">
+                  <dt className="text-xs text-muted-foreground">API version</dt>
+                  <dd className="text-sm text-foreground">
+                    <MonoPlain className="text-xs">{attempt.request.apiVersion}</MonoPlain>
+                  </dd>
+                </div>
+              )}
+            </dl>
+            {Object.keys(attempt.request.safeHeaders).length > 0 && (
+              <div className="mt-2">
+                <p className="mb-1 text-xs text-muted-foreground">Headers</p>
+                <div className="overflow-x-auto rounded-md border border-border bg-muted/50 p-2">
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {Object.entries(attempt.request.safeHeaders).map(([key, value]) => (
+                        <tr key={key}>
+                          <td className="whitespace-nowrap py-0.5 pr-3 font-medium text-muted-foreground">
+                            {key}
+                          </td>
+                          <td className="py-0.5">
+                            <MonoPlain className="text-xs">{value}</MonoPlain>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            <div className="mt-2">
+              <p className="mb-1 text-xs text-muted-foreground">
+                Payload{attempt.request.payloadTruncated && " (truncated)"}
+                {attempt.request.payloadMalformed && " (malformed)"}
+              </p>
+              {attempt.request.sanitizedPayload ? (
+                <pre
+                  aria-label="Sanitized request payload"
+                  className="max-h-64 overflow-auto rounded-md border border-border bg-muted/50 p-3 text-xs leading-relaxed"
+                >
+                  <code className="font-mono">{attempt.request.sanitizedPayload}</code>
+                </pre>
+              ) : (
+                <p className="text-xs text-muted-foreground">No payload available.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Response evidence */}
+          <div className="border-t border-border pt-3">
+            <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
+              Response or transport result
+            </h3>
+            {attempt.response.responseAbsent ? (
+              <div className="rounded-md border border-border bg-muted/50 p-3">
+                <p className="text-sm text-foreground">
+                  <Clock className="mr-1.5 inline size-3.5 text-muted-foreground" />
+                  No HTTP response was recorded.
+                </p>
+                {attempt.response.transportResult && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {attempt.response.transportResult}
+                  </p>
+                )}
+                {attempt.outcome === "outcome_unknown" && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    The receiver's final acceptance could not be confirmed.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
+                  {attempt.response.httpStatus !== null && (
+                    <div className="contents">
+                      <dt className="text-xs text-muted-foreground">HTTP status</dt>
+                      <dd className="text-sm text-foreground">{attempt.response.httpStatus}</dd>
+                    </div>
+                  )}
+                </dl>
+                {Object.keys(attempt.response.safeHeaders).length > 0 && (
+                  <div className="mt-2">
+                    <p className="mb-1 text-xs text-muted-foreground">Headers</p>
+                    <div className="overflow-x-auto rounded-md border border-border bg-muted/50 p-2">
+                      <table className="w-full text-xs">
+                        <tbody>
+                          {Object.entries(attempt.response.safeHeaders).map(([key, value]) => (
+                            <tr key={key}>
+                              <td className="whitespace-nowrap py-0.5 pr-3 font-medium text-muted-foreground">
+                                {key}
+                              </td>
+                              <td className="py-0.5">
+                                <MonoPlain className="text-xs">{value}</MonoPlain>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-2">
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    Body{attempt.response.bodyTruncated && " (truncated)"}
+                  </p>
+                  {attempt.response.sanitizedBody ? (
+                    <pre
+                      aria-label="Sanitized response body"
+                      className="max-h-64 overflow-auto rounded-md border border-border bg-muted/50 p-3 text-xs leading-relaxed"
+                    >
+                      <code className="font-mono">{attempt.response.sanitizedBody}</code>
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No response body available.</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </Panel>
     </>
+  )
+}
+
+function AttemptTimelineItem({
+  attempt,
+  isSelected,
+  onSelect,
+}: {
+  attempt: DeliveryAttemptRecord
+  isSelected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <li className="border-b border-border last:border-b-0">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={isSelected}
+        aria-current={isSelected ? "true" : undefined}
+        aria-label={`Attempt ${attempt.attemptNumber}${isSelected ? " — evidence shown" : " — view evidence"}`}
+        className={cn(
+          "flex w-full cursor-pointer items-start gap-3 rounded-sm px-1 py-3 text-left transition-colors",
+          "focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-[3px]",
+          isSelected
+            ? "bg-muted/70 ring-1 ring-inset ring-border"
+            : "hover:bg-muted/50"
+        )}
+      >
+        <div
+          className={cn(
+            "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium transition-colors",
+            isSelected
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-card text-muted-foreground"
+          )}
+        >
+          {attempt.attemptNumber}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-foreground">
+              {attemptOutcomeLabels[attempt.outcome]}
+            </span>
+            {attempt.httpStatusCode !== null && (
+              <MonoPlain className="text-xs text-muted-foreground">
+                HTTP {attempt.httpStatusCode}
+              </MonoPlain>
+            )}
+            {attempt.observedFailureCategory && (
+              <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[0.6875rem] text-muted-foreground">
+                {observedFailureCategoryLabels[attempt.observedFailureCategory]}
+              </span>
+            )}
+            <span
+              className={cn(
+                "ml-auto inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-medium",
+                isSelected ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              <FileText className="size-3" />
+              {isSelected ? "Evidence shown" : "View evidence"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">{attempt.responseSummary}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            <span>{formatDateTime(attempt.startedAt)}</span>
+            {attempt.latencyMs !== null && <span>{formatLatency(attempt.latencyMs)}</span>}
+            <span>{retryDecisionLabels[attempt.retryDecision]}</span>
+            {attempt.nextRetryAt && (
+              <span>Next: {formatDateTime(attempt.nextRetryAt)}</span>
+            )}
+          </div>
+        </div>
+      </button>
+    </li>
   )
 }

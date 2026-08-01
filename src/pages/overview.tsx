@@ -99,7 +99,7 @@ export function OverviewPage() {
             title="Observed failure patterns"
             description="Failure clusters observed in the selected range, ranked by affected deliveries. These are evidence, not a root-cause determination."
           >
-            <FailureClusterList rows={data.clusters} endpointNames={endpointNames} />
+            <FailureClusterList rows={data.clusters} endpointNames={endpointNames} timeRange={data.timeRange} />
           </Panel>
 
           <Panel

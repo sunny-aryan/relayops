@@ -1,6 +1,11 @@
 import type {
   AuditActorType,
+  AttemptResultOutcome,
+  DeliveryState,
+  DeliveryStateFilter,
+  DeliveryTimeRange,
   FailureClusterActivity,
+  ObservedFailureCategory,
   OverviewTimeRange,
   TelemetryState,
   DeliveryStatus,
@@ -53,6 +58,54 @@ export const failureCategoryLabels: Record<FailureCategory, string> = {
   timeout: "Timeout",
   dns_failure: "DNS failure",
   tls_failure: "TLS failure",
+}
+
+export const deliveryStateLabels: Record<DeliveryState, string> = {
+  delivered: "Delivered",
+  retrying: "Retrying",
+  exhausted: "Exhausted",
+  unknown: "Outcome unknown",
+}
+
+export const deliveryStateFilterLabels: Record<DeliveryStateFilter, string> = {
+  all: "All states",
+  delivered: "Delivered",
+  retrying: "Retrying",
+  exhausted: "Exhausted",
+  unknown: "Outcome unknown",
+}
+
+export const attemptOutcomeLabels: Record<AttemptResultOutcome, string> = {
+  success: "Successful",
+  confirmed_failure: "Confirmed unsuccessful",
+  outcome_unknown: "Outcome unknown",
+}
+
+export const retryDecisionLabels: Record<"retry" | "exhausted" | "succeeded" | "no_retry", string> = {
+  retry: "Retry scheduled",
+  exhausted: "Retry limit reached",
+  succeeded: "Succeeded — no retry",
+  no_retry: "No retry",
+}
+
+export const observedFailureCategoryLabels: Record<ObservedFailureCategory, string> = {
+  http_400: "HTTP 400",
+  http_401: "HTTP 401",
+  http_404: "HTTP 404",
+  http_409: "HTTP 409",
+  http_429: "HTTP 429",
+  http_500: "HTTP 500",
+  http_503: "HTTP 503",
+  timeout: "Timeout",
+  connection_terminated: "Connection terminated",
+  dns_failure: "DNS failure",
+  tls_failure: "TLS failure",
+}
+
+export const deliveryTimeRangeLabels: Record<DeliveryTimeRange, string> = {
+  "6h": "Last 6 hours",
+  "24h": "Last 24 hours",
+  "7d": "Last 7 days",
 }
 
 export const replayEligibilityLabels: Record<ReplayEligibility, string> = {

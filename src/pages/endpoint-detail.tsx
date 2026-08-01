@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { useParams } from "react-router-dom"
-import { AlertCircle } from "lucide-react"
+import { Link, useParams } from "react-router-dom"
+import { AlertCircle, ArrowRightLeft } from "lucide-react"
 
 import { FailureClusterList } from "@/components/overview/failure-cluster-list"
 import { MetricStrip } from "@/components/overview/metric-strip"
@@ -101,7 +101,21 @@ export function EndpointDetailPage() {
             <EndpointHealthBadge health={endpoint.health} />
           )
         }
-        actions={<TimeRangeSelector value={timeRange} onChange={setTimeRange} />}
+        actions={
+          <div className="flex shrink-0 items-center gap-2">
+            {!disabled && !insufficient && (
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  to={`/deliveries?endpoint=${endpoint.id}&range=${timeRange}`}
+                >
+                  <ArrowRightLeft className="size-3.5" />
+                  View deliveries
+                </Link>
+              </Button>
+            )}
+            <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+          </div>
+        }
       />
 
       <section
@@ -195,7 +209,11 @@ export function EndpointDetailPage() {
             title="Observed failure patterns"
             description="Failure clusters observed for this endpoint in the selected range, ranked by affected deliveries. These are evidence, not a root-cause determination."
           >
-            <FailureClusterList rows={clusters} endpointNames={endpointNames} />
+            <FailureClusterList
+              rows={clusters}
+              endpointNames={endpointNames}
+              timeRange={timeRange}
+            />
           </Panel>
         </>
       )}
