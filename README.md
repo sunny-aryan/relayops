@@ -290,14 +290,14 @@ The repository contains nine screenshots that together show the complete RelayOp
 
 | # | Screenshot | Product evidence |
 |---|---|---|
-| 1 | [`01-production-overview.png`](docs/screenshots/01a-production-overview.png) <br> [`01-production-overview.png`](docs/screenshots/01b-production-overview.png) | Production telemetry, endpoint health, failure clusters, and product structure |
+| 1 | [`01a-production-overview.png`](docs/screenshots/01a-production-overview.png) <br> [`01b-production-overview.png`](docs/screenshots/01b-production-overview.png) | Production telemetry, endpoint health, failure clusters, and product structure |
 | 2 | [`02-delivery-explorer.png`](docs/screenshots/02-delivery-explorer.png) | Operational delivery search, filters, and mixed delivery outcomes |
-| 3 | [`03-delivery-assessment.png`](docs/screenshots/03-delivery-assessment.png) | Attempt evidence, deterministic assessment, and replay eligibility |
+| 3 | [`03a-delivery-assessment.png`](docs/screenshots/03a-delivery-assessment.png) <br> [`03b-delivery-assessment.png`](docs/screenshots/03b-delivery-assessment.png) | Attempt evidence, deterministic assessment, and replay eligibility |
 | 4 | [`04-replay-acknowledgement.png`](docs/screenshots/04-replay-acknowledgement.png) | Contextual acknowledgement, simulation disclosure, and replay request |
-| 5 | [`05-recovered-delivery.png`](docs/screenshots/05-recovered-delivery.png) | Recovery through a separate replay without rewriting original attempts |
-| 6 | [`06-replay-detail.png`](docs/screenshots/06-replay-detail.png) | Replay lifecycle, operator, acknowledgement, execution evidence, and provenance |
+| 5 | [`05a-recovered-delivery.png`](docs/screenshots/05a-recovered-delivery.png) <br> [`05b-recovered-delivery.png`](docs/screenshots/05b-recovered-delivery.png) | Recovery through a separate replay without rewriting original attempts |
+| 6 | [`06a-replay-detail.png`](docs/screenshots/06a-replay-detail.png) <br> [`06b-replay-detail.png`](docs/screenshots/06b-replay-detail.png) | Replay lifecycle, operator, acknowledgement, execution evidence, and provenance |
 | 7 | [`07-audit-trace.png`](docs/screenshots/07-audit-trace.png) | Requested, started, and completed replay lifecycle events |
-| 8 | [`08-ambiguous-outcome-blocked.png`](docs/screenshots/08-ambiguous-outcome-blocked.png) | Unknown receiver acceptance and duplicate-side-effect blocker |
+| 8 | [`08a-ambiguous-outcome-blocked.png`](docs/screenshots/08a-ambiguous-outcome-blocked.png) <br> [`08b-ambiguous-outcome-blocked.png`](docs/screenshots/08b-ambiguous-outcome-blocked.png) | Unknown receiver acceptance and duplicate-side-effect blocker |
 | 9 | [`09-sandbox-failed-replay.png`](docs/screenshots/09-sandbox-failed-replay.png) | Sandbox HTTP 401 replay failure retained without false recovery |
 
 The main README emphasizes six screenshots that communicate the central workflow. The remaining three stay in the repository as supporting evidence for the acknowledgement, replay-detail, and failed-recovery states.
