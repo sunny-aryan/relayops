@@ -237,7 +237,7 @@ export function RecoveryActionPanel({
 
       {/* Confirmation dialog */}
       <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl lg:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Request replay</DialogTitle>
             <DialogDescription>
@@ -245,108 +245,111 @@ export function RecoveryActionPanel({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-3">
-            {/* Canonical info */}
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[8rem_1fr]">
-              <div className="contents">
-                <dt className="text-xs text-muted-foreground">Delivery ID</dt>
-                <dd className="text-sm"><MonoPlain className="text-xs">{delivery.id}</MonoPlain></dd>
-              </div>
-              {event && (
+          <div className="min-h-0 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-3">
+              {/* Canonical info */}
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[8rem_1fr]">
                 <div className="contents">
-                  <dt className="text-xs text-muted-foreground">Event type</dt>
-                  <dd className="text-sm"><MonoPlain className="text-xs">{event.eventType}</MonoPlain></dd>
+                  <dt className="text-xs text-muted-foreground">Delivery ID</dt>
+                  <dd className="text-sm"><MonoPlain className="text-xs">{delivery.id}</MonoPlain></dd>
                 </div>
-              )}
-              {event && (
+                {event && (
+                  <div className="contents">
+                    <dt className="text-xs text-muted-foreground">Event type</dt>
+                    <dd className="text-sm"><MonoPlain className="text-xs">{event.eventType}</MonoPlain></dd>
+                  </div>
+                )}
+                {event && (
+                  <div className="contents">
+                    <dt className="text-xs text-muted-foreground">Event ID</dt>
+                    <dd className="text-sm"><MonoPlain className="text-xs">{event.eventId}</MonoPlain></dd>
+                  </div>
+                )}
+                {endpoint && (
+                  <div className="contents">
+                    <dt className="text-xs text-muted-foreground">Endpoint</dt>
+                    <dd className="text-sm">{endpoint.name}</dd>
+                  </div>
+                )}
+                {endpoint && (
+                  <div className="contents">
+                    <dt className="text-xs text-muted-foreground">Destination</dt>
+                    <dd className="text-sm"><MonoPlain className="text-xs">{endpoint.maskedUrl}</MonoPlain></dd>
+                  </div>
+                )}
                 <div className="contents">
-                  <dt className="text-xs text-muted-foreground">Event ID</dt>
-                  <dd className="text-sm"><MonoPlain className="text-xs">{event.eventId}</MonoPlain></dd>
+                  <dt className="text-xs text-muted-foreground">Environment</dt>
+                  <dd className="text-sm capitalize">{environment}</dd>
                 </div>
-              )}
-              {endpoint && (
                 <div className="contents">
-                  <dt className="text-xs text-muted-foreground">Endpoint</dt>
-                  <dd className="text-sm">{endpoint.name}</dd>
+                  <dt className="text-xs text-muted-foreground">Original state</dt>
+                  <dd className="text-sm capitalize">{delivery.state}</dd>
                 </div>
-              )}
-              {endpoint && (
                 <div className="contents">
-                  <dt className="text-xs text-muted-foreground">Destination</dt>
-                  <dd className="text-sm"><MonoPlain className="text-xs">{endpoint.maskedUrl}</MonoPlain></dd>
+                  <dt className="text-xs text-muted-foreground">Eligibility</dt>
+                  <dd className="text-sm">{assessment.replayEligibility.decision === "eligible" ? "Eligible" : "Blocked"}</dd>
                 </div>
-              )}
-              <div className="contents">
-                <dt className="text-xs text-muted-foreground">Environment</dt>
-                <dd className="text-sm capitalize">{environment}</dd>
-              </div>
-              <div className="contents">
-                <dt className="text-xs text-muted-foreground">Original state</dt>
-                <dd className="text-sm capitalize">{delivery.state}</dd>
-              </div>
-              <div className="contents">
-                <dt className="text-xs text-muted-foreground">Eligibility</dt>
-                <dd className="text-sm">{assessment.replayEligibility.decision === "eligible" ? "Eligible" : "Blocked"}</dd>
-              </div>
-              <div className="contents">
-                <dt className="text-xs text-muted-foreground">Operator</dt>
-                <dd className="text-sm">{operatorName} ({roleLabels[operatorRole]})</dd>
-              </div>
-              <div className="contents">
-                <dt className="text-xs text-muted-foreground">Recommendation</dt>
-                <dd className="text-sm">{assessment.recommendedAction.text}</dd>
-              </div>
-            </dl>
+                <div className="contents">
+                  <dt className="text-xs text-muted-foreground">Operator</dt>
+                  <dd className="text-sm">{operatorName} ({roleLabels[operatorRole]})</dd>
+                </div>
+                <div className="contents">
+                  <dt className="text-xs text-muted-foreground">Recommendation</dt>
+                  <dd className="text-sm">{assessment.recommendedAction.text}</dd>
+                </div>
+              </dl>
 
-            {/* Warning */}
-            <div className="rounded-md border border-warning/30 bg-warning/5 p-3">
+              {/* Warning */}
+              <div className="rounded-md border border-warning/30 bg-warning/5 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                  <div className="flex flex-col gap-1 text-xs text-foreground">
+                    <p>The stored payload will be sent again to the destination endpoint.</p>
+                    <p>Replay may create duplicate downstream side effects. RelayOps cannot verify receiver idempotency.</p>
+                    <p>Eligibility does not guarantee success.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Acknowledgement checkbox */}
               <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-                <div className="flex flex-col gap-1 text-xs text-foreground">
-                  <p>The stored payload will be sent again to the destination endpoint.</p>
-                  <p>Replay may create duplicate downstream side effects. RelayOps cannot verify receiver idempotency.</p>
-                  <p>Eligibility does not guarantee success.</p>
-                </div>
+                <Checkbox
+                  id="replay-ack"
+                  checked={acknowledged}
+                  onCheckedChange={(v) => setAcknowledged(v === true)}
+                  className="mt-0.5"
+                />
+                <label htmlFor="replay-ack" className="text-xs text-foreground">
+                  {assessment.acknowledgementText}
+                </label>
               </div>
-            </div>
 
-            {/* Acknowledgement checkbox */}
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id="replay-ack"
-                checked={acknowledged}
-                onCheckedChange={(v) => setAcknowledged(v === true)}
-                className="mt-0.5"
-              />
-              <label htmlFor="replay-ack" className="text-xs text-foreground">
-                {assessment.acknowledgementText}
-              </label>
-            </div>
+              {/* Optional note */}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="replay-note" className="text-xs text-muted-foreground">
+                  Operator note (optional, max 200 characters)
+                </label>
+                <Textarea
+                  id="replay-note"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value.slice(0, 200))}
+                  rows={2}
+                  placeholder="Add a note for the audit trail..."
+                  className="text-xs"
+                />
+                <span className="text-right text-[0.6875rem] text-muted-foreground">
+                  {note.length}/200
+                </span>
+              </div>
 
-            {/* Optional note */}
-            <div className="flex flex-col gap-1">
-              <label htmlFor="replay-note" className="text-xs text-muted-foreground">
-                Operator note (optional, max 200 characters)
-              </label>
-              <Textarea
-                id="replay-note"
-                value={note}
-                onChange={(e) => setNote(e.target.value.slice(0, 200))}
-                rows={2}
-                placeholder="Add a note for the audit trail..."
-                className="text-xs"
-              />
-              <span className="text-right text-[0.6875rem] text-muted-foreground">
-                {note.length}/200
-              </span>
-            </div>
 
-            {/* Command error */}
-            {commandError && (
-              <p role="alert" className="rounded-md border border-danger/30 bg-danger/5 p-2 text-xs text-danger">
-                {commandError}
-              </p>
-            )}
+              {/* Command error */}
+              {commandError && (
+                <p role="alert" className="rounded-md border border-danger/30 bg-danger/5 p-2 text-xs text-danger">
+                  {commandError}
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
