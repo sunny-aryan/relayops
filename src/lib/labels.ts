@@ -140,6 +140,37 @@ export const auditActorTypeLabels: Record<AuditActorType, string> = {
   support: "Support",
 }
 
+export const auditActionLabels: Record<string, string> = {
+  "replay.requested": "Replay requested",
+  "replay.started": "Replay started",
+  "replay.completed": "Replay completed",
+  "replay.failed": "Replay failed",
+  "replay.skipped": "Replay skipped",
+  "replay.partially_completed": "Replay partially completed",
+  "endpoint.health_changed": "Endpoint health changed",
+  "endpoint.disabled": "Endpoint disabled",
+  "payload.redacted": "Payload redacted",
+}
+
+export function resolveAuditActionLabel(action: string, isSimulated: boolean): string {
+  if (action === "replay.started" && isSimulated) return "Simulated replay started"
+  return auditActionLabels[action] ?? action
+}
+
+export type AuditCategory = "all" | "replays" | "endpoints" | "governance"
+
+export const auditCategoryLabels: Record<AuditCategory, string> = {
+  all: "All activity",
+  replays: "Replays",
+  endpoints: "Endpoints",
+  governance: "Data governance",
+}
+
+export const auditProvenanceLabels: Record<string, string> = {
+  recorded: "Recorded event",
+  simulated: "Simulated execution record",
+}
+
 export const timeRangeLabels: Record<OverviewTimeRange, string> = {
   "6h": "Last 6 hours",
   "24h": "Last 24 hours",

@@ -2,7 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import { AppLayout } from "@/components/layout/app-layout"
 import { AppProvider } from "@/contexts/app-context"
-import { ChangelogPage } from "@/pages/changelog"
+import { AuditEventDetailPage } from "@/pages/audit-event-detail"
+import { AuditPage } from "@/pages/audit"
 import { DeliveriesPage } from "@/pages/deliveries"
 import { DeliveryDetailPage } from "@/pages/delivery-detail"
 import { DevelopersPage } from "@/pages/developers"
@@ -31,7 +32,9 @@ export function App() {
             <Route path="/usage" element={<UsagePage />} />
             <Route path="/developers" element={<DevelopersPage />} />
             <Route path="/status" element={<StatusPage />} />
-            <Route path="/changelog" element={<ChangelogPage />} />
+            <Route path="/audit" element={<AuditPage />} />
+          <Route path="/audit/:auditEventId" element={<AuditEventDetailPage />} />
+          <Route path="/changelog" element={<Navigate to="/audit" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>

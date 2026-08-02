@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowLeft, Clock, Copy, Check, FileText } from "lucide-react"
+import { ArrowLeft, Clock, Copy, Check, FileText, History } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { DeliveryAssessmentSection } from "@/components/delivery/assessment-section"
@@ -262,6 +262,17 @@ function DeliveryDetail({
           explorerQs={explorerQs}
           onReplayRequested={onReplayRequested}
         />
+      )}
+
+      {/* Audit trail link */}
+      {data.hasCoherentReplayHistory && (
+        <Link
+          to={`/audit?q=${encodeURIComponent(delivery.id)}`}
+          className="inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline"
+        >
+          <History className="size-4" />
+          View audit trail
+        </Link>
       )}
 
       {/* Timeline */}

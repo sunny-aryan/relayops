@@ -210,7 +210,7 @@ export function isCoherentSimulatedFact(job: ReplayJob, item: ReplayJobItem): bo
  * integer counts that sum to totalItems, and a status consistent with those
  * counts. Does not require all bulk items to be present.
  */
-function isCoherentRecordedTerminalJob(job: ReplayJob): boolean {
+export function isCoherentRecordedTerminalJob(job: ReplayJob): boolean {
   const s = job.status
   if (s !== "completed" && s !== "partially_completed" && s !== "failed" && s !== "cancelled") return false
 

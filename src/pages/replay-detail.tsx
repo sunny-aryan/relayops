@@ -312,6 +312,42 @@ function ReplayDetail({
         </Panel>
       )}
 
+      {/* Audit trail */}
+      {data.auditTrail.length > 0 && (
+        <Panel title="Audit trail" description="Lifecycle events for this replay job.">
+          <ol className="flex flex-col gap-0">
+            {data.auditTrail.map((entry, i) => (
+              <li key={`${entry.action}-${i}`} className="border-b border-border last:border-b-0">
+                <Link
+                  to={entry.detailHref}
+                  className="flex flex-col gap-1 px-1 py-2.5 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none rounded-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{entry.actionLabel}</span>
+                    {entry.isSimulated && (
+                      <span className="inline-flex items-center gap-1 rounded border border-info/30 bg-info/5 px-1.5 py-0.5 text-[0.6875rem] text-info">
+                        Simulated
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {formatDateTime(entry.occurredAt)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{entry.summary}</p>
+                  <span className="text-[0.6875rem] text-muted-foreground/70">{entry.actorLabel}</span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+          <Link
+            to={`/audit?q=${encodeURIComponent(job.id)}`}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline"
+          >
+            View in Audit log
+          </Link>
+        </Panel>
+      )}
+
       {/* Navigation */}
       <div className="flex flex-wrap items-center gap-3">
         <Link

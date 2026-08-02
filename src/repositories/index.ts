@@ -35,10 +35,18 @@ import {
   commandErrorToMessage,
   validateReplayCommand,
 } from "@/domain/replay-command"
-import { roleLabels } from "@/lib/labels"
+import { projectReplayAuditEvents, buildReplayAuditTrail, type AuditProjectionContext } from "@/domain/audit-projection"
+import { resolveAuditActionLabel, roleLabels } from "@/lib/labels"
+import type { AuditCategory } from "@/lib/labels"
 import type {
   ApiKeyMetadata,
   AuditEvent,
+  AuditEventDetail,
+  AuditListRow,
+  AuditListResult,
+  AuditProvenance,
+  AuditRelatedResource,
+  AuditTrailEntry,
   DeliveryDetailAssessmentAggregate,
   DeliveryEndpointContext,
   DeliveryEventContext,
@@ -347,6 +355,7 @@ export function getDeliveryDetailRecord(
       operatorName,
       operatorRole,
       replayState: null,
+      hasCoherentReplayHistory: false,
     }
     return new Promise((res) => setTimeout(() => res(result), 150))
   }
@@ -408,6 +417,7 @@ export function getDeliveryDetailRecord(
     operatorName,
     operatorRole,
     replayState,
+    hasCoherentReplayHistory: replayFacts.replayHistory.length > 0,
   }
   return new Promise((res) => setTimeout(() => res(result), 150))
 }
@@ -710,6 +720,9 @@ export function getReplayJobDetail(
     return roleLabels[membership?.role ?? "observer"]
   })()
 
+  const auditCtx: AuditProjectionContext = { workspaceId: workspace.id, environment, users, memberships, endpoints, deliveries: collectDeliveries(environment) }
+  const auditTrail = buildReplayAuditTrail(job!, items, auditEvents, auditCtx)
+
   const result: ReplayJobDetailAggregate = {
     job: job!,
     items,
@@ -720,6 +733,7 @@ export function getReplayJobDetail(
     sourceEvent,
     isSimulated: job!.executionMode === "simulated",
     resultAvailable,
+    auditTrail,
   }
 
   return new Promise((res) => setTimeout(() => res(result), 100))
@@ -904,3 +918,329 @@ export function advanceSingleReplayExecution(
 ): Promise<ReplayJobDetailAggregate | null> {
   return getReplayJobDetail(environment, replayJobId)
 }
+
+// ─── Audit ───────────────────────────────────────────────────────────
+
+function buildAuditContext(env: Environment): AuditProjectionContext {
+  return {
+    workspaceId: workspace.id,
+    environment: env,
+    users,
+    memberships,
+    endpoints,
+    deliveries: collectDeliveries(env),
+  }
+}
+
+function collectDeliveries(env: Environment): DeliveryRecord[] {
+  return listDeliveriesFromFixtures(env, {
+    search: "",
+    timeRange: "24h",
+    endpointId: null,
+    eventType: null,
+    state: "all",
+    failureCategory: null,
+  }).records
+}
+
+function reconcileOverlayJobs(env: Environment): void {
+  const overlay = getOverlay(env)
+  for (const job of overlay.getAllJobs()) {
+    if (job.executionMode !== "simulated") continue
+    if (job.status !== "queued" && job.status !== "running") continue
+    const items = overlay.getItems(job.id)
+    reconcileJob(overlay, job, items)
+  }
+}
+
+function resolveRelatedResources(
+  targetType: string,
+  targetId: string,
+  env: Environment
+): AuditRelatedResource[] {
+  const resources: AuditRelatedResource[] = []
+
+  if (targetType === "endpoint") {
+    const endpoint = endpoints.find(
+      (item) => item.id === targetId && item.environment === env
+    )
+
+    resources.push({
+      type: "endpoint",
+      id: targetId,
+      label: endpoint?.name ?? targetId,
+      href: endpoint ? `/endpoints/${targetId}` : null,
+    })
+  } else if (targetType === "delivery") {
+    const delivery = getDeliveryDetailFromFixtures(env, targetId)
+
+    resources.push({
+      type: "delivery",
+      id: targetId,
+      label: targetId,
+      href: delivery ? `/deliveries/${targetId}` : null,
+    })
+  } else if (targetType === "replay_job") {
+    const job =
+      replayJobs.find(
+        (item) => item.id === targetId && item.environment === env
+      ) ?? getOverlay(env).getJob(targetId)
+
+    if (!job) {
+      resources.push({
+        type: "replay_job",
+        id: targetId,
+        label: targetId,
+        href: null,
+      })
+
+      return resources
+    }
+
+    resources.push({
+      type: "replay_job",
+      id: job.id,
+      label: job.id,
+      href: `/replays/${job.id}`,
+    })
+
+    if (job.sourceDeliveryId) {
+      const delivery = getDeliveryDetailFromFixtures(
+        env,
+        job.sourceDeliveryId
+      )
+
+      if (delivery) {
+        resources.push({
+          type: "delivery",
+          id: job.sourceDeliveryId,
+          label: job.sourceDeliveryId,
+          href: `/deliveries/${job.sourceDeliveryId}`,
+        })
+      }
+    }
+
+    const endpoint = endpoints.find(
+      (item) =>
+        item.id === job.endpointId &&
+        item.environment === env
+    )
+
+    if (endpoint) {
+      resources.push({
+        type: "endpoint",
+        id: endpoint.id,
+        label: endpoint.name,
+        href: `/endpoints/${endpoint.id}`,
+      })
+    }
+  }
+
+  return resources
+}
+
+function environmentLabel(env: Environment | null): string {
+  return env === null ? "Workspace-wide" : env === "production" ? "Production" : "Sandbox"
+}
+
+function actionToCategory(action: string): AuditCategory {
+  if (action.startsWith("replay.")) return "replays"
+  if (action.startsWith("endpoint.")) return "endpoints"
+  if (action.startsWith("payload.")) return "governance"
+  return "all"
+}
+
+function buildProjectedEventDetail(
+  ev: { id: string; action: string; occurredAt: string; actorLabel: string; actorUserId: string | null; summary: string; targetType: string; targetId: string; environment: Environment | null; provenance: AuditProvenance; isSimulated: boolean; operatorNote: string | null; httpStatus: number | null; executionModeLabel: string | null },
+  env: Environment
+): AuditEventDetail | null {
+  if (ev.environment !== null && ev.environment !== env) return null
+  return {
+    id: ev.id,
+    action: ev.action,
+    actionLabel: resolveAuditActionLabel(ev.action, ev.isSimulated),
+    occurredAt: ev.occurredAt,
+    actorLabel: ev.actorLabel,
+    actorType: "user",
+    actorRoleLabel: resolveRoleLabelRepo(ev.actorUserId),
+    environment: ev.environment,
+    environmentLabel: environmentLabel(ev.environment),
+    summary: ev.summary,
+    targetType: ev.targetType,
+    targetId: ev.targetId,
+    provenance: ev.provenance,
+    isSimulated: ev.isSimulated,
+    relatedResources: resolveRelatedResources(ev.targetType, ev.targetId, env),
+    operatorNote: ev.operatorNote,
+    httpStatus: ev.httpStatus,
+    executionModeLabel: ev.executionModeLabel,
+  }
+}
+
+function fixtureToDetail(
+  ev: AuditEvent,
+  env: Environment
+): AuditEventDetail | null {
+  if (ev.environment !== null && ev.environment !== env) return null
+  return {
+    id: ev.id,
+    action: ev.action,
+    actionLabel: resolveAuditActionLabel(ev.action, false),
+    occurredAt: ev.occurredAt,
+    actorLabel: ev.actorLabel,
+    actorType: ev.actorType,
+    actorRoleLabel: resolveRoleLabelRepo(ev.actorUserId),
+    environment: ev.environment,
+    environmentLabel: environmentLabel(ev.environment),
+    summary: ev.summary,
+    targetType: ev.targetType,
+    targetId: ev.targetId,
+    provenance: "recorded",
+    isSimulated: false,
+    relatedResources: resolveRelatedResources(ev.targetType, ev.targetId, env),
+    operatorNote: null,
+    httpStatus: null,
+    executionModeLabel: null,
+  }
+}
+
+function resolveRoleLabelRepo(userId: string | null): string | null {
+  if (!userId) return null
+  const membership = memberships.find(
+    (m) => m.userId === userId && m.workspaceId === workspace.id
+  )
+  return membership ? roleLabels[membership.role] : null
+}
+
+function buildAllAuditEvents(env: Environment): { id: string; action: string; occurredAt: string; actorLabel: string; actorUserId: string | null; actorType: "user" | "system" | "support"; summary: string; targetType: string; targetId: string; environment: Environment | null; provenance: AuditProvenance; isSimulated: boolean; operatorNote: string | null; httpStatus: number | null; executionModeLabel: string | null }[] {
+  reconcileOverlayJobs(env)
+  const overlay = getOverlay(env)
+  const allJobs = [...replayJobs, ...overlay.getAllJobs()]
+  const allItems = [...replayJobItems, ...overlay.getAllItems()]
+  const ctx = buildAuditContext(env)
+  const projected = projectReplayAuditEvents(allJobs, allItems, auditEvents, ctx)
+
+  const fixtureRows = auditEvents
+    .filter((e) => e.environment === null || e.environment === env)
+    .map((e) => ({
+      id: e.id,
+      action: e.action,
+      occurredAt: e.occurredAt,
+      actorLabel: e.actorLabel,
+      actorUserId: e.actorUserId,
+      actorType: e.actorType,
+      summary: e.summary,
+      targetType: e.targetType,
+      targetId: e.targetId,
+      environment: e.environment,
+      provenance: "recorded" as AuditProvenance,
+      isSimulated: false,
+      operatorNote: null,
+      httpStatus: null,
+      executionModeLabel: null,
+    }))
+
+  const projectedRows = projected.map((p) => ({
+    id: p.id,
+    action: p.action,
+    occurredAt: p.occurredAt,
+    actorLabel: p.actorLabel,
+    actorUserId: p.actorUserId,
+    actorType: "user" as const,
+    summary: p.summary,
+    targetType: p.targetType,
+    targetId: p.targetId,
+    environment: p.environment,
+    provenance: p.provenance,
+    isSimulated: p.isSimulated,
+    operatorNote: p.operatorNote,
+    httpStatus: p.httpStatus,
+    executionModeLabel: p.executionModeLabel,
+  }))
+
+  return [...fixtureRows, ...projectedRows].sort((a, b) => {
+    const cmp = b.occurredAt.localeCompare(a.occurredAt)
+    if (cmp !== 0) return cmp
+    return b.id.localeCompare(a.id)
+  })
+}
+
+export function listAuditEvents(
+  env: Environment,
+  filters: { search?: string; category?: AuditCategory; actorType?: string }
+): Promise<AuditListResult> {
+  const all = buildAllAuditEvents(env)
+  let filtered = all
+
+  if (filters.category && filters.category !== "all") {
+    filtered = filtered.filter((e) => actionToCategory(e.action) === filters.category)
+  }
+  if (filters.actorType && filters.actorType !== "all") {
+    filtered = filtered.filter((e) => e.actorType === filters.actorType)
+  }
+  if (filters.search && filters.search.trim().length > 0) {
+    const q = filters.search.trim().toLowerCase()
+    filtered = filtered.filter((e) => {
+      const actionLabel = resolveAuditActionLabel(e.action, e.isSimulated)
+      return (
+        actionLabel.toLowerCase().includes(q) ||
+        e.action.toLowerCase().includes(q) ||
+        e.actorLabel.toLowerCase().includes(q) ||
+        e.targetId.toLowerCase().includes(q) ||
+        e.summary.toLowerCase().includes(q)
+      )
+    })
+  }
+
+  const rows: AuditListRow[] = filtered.map((e) => ({
+    id: e.id,
+    action: e.action,
+    actionLabel: resolveAuditActionLabel(e.action, e.isSimulated),
+    occurredAt: e.occurredAt,
+    actorLabel: e.actorLabel,
+    actorType: e.actorType,
+    environment: e.environment,
+    environmentLabel: environmentLabel(e.environment),
+    targetType: e.targetType,
+    targetId: e.targetId,
+    summary: e.summary,
+    provenance: e.provenance,
+    isSimulated: e.isSimulated,
+    detailHref: `/audit/${e.id}`,
+  }))
+
+  return Promise.resolve({ rows, total: rows.length })
+}
+
+export function getAuditEventDetail(
+  env: Environment,
+  auditEventId: string
+): Promise<AuditEventDetail | null> {
+  const all = buildAllAuditEvents(env)
+  const ev = all.find((e) => e.id === auditEventId)
+  if (!ev) return Promise.resolve(null)
+
+  if (ev.provenance === "recorded" && ev.actorType !== "user") {
+    const fixture = auditEvents.find((f) => f.id === auditEventId)
+    if (fixture) {
+      return Promise.resolve(fixtureToDetail(fixture, env))
+    }
+  }
+  return Promise.resolve(buildProjectedEventDetail(ev, env))
+}
+
+export function listAuditTrailForReplay(
+  env: Environment,
+  replayJobId: string
+): Promise<AuditTrailEntry[]> {
+  reconcileOverlayJobs(env)
+  const overlay = getOverlay(env)
+  const allJobs = [...replayJobs, ...overlay.getAllJobs()]
+  const allItems = [...replayJobItems, ...overlay.getAllItems()]
+  const job = allJobs.find((j) => j.id === replayJobId)
+  if (!job) return Promise.resolve([])
+  const jobItems = allItems.filter((i) => i.replayJobId === replayJobId)
+  const ctx = buildAuditContext(env)
+  return Promise.resolve(buildReplayAuditTrail(job, jobItems, auditEvents, ctx))
+}
+

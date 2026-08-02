@@ -274,6 +274,7 @@ export interface DeliveryDetailAssessmentAggregate extends DeliveryDetailAggrega
   operatorName: string
   operatorRole: Role
   replayState: ReplayStateInfo | null
+  hasCoherentReplayHistory: boolean
 }
 
 export interface DeliveryFilters {
@@ -678,4 +679,80 @@ export interface AuditEvent {
   targetId: string
   summary: string
   occurredAt: string
+}
+
+export type AuditProvenance = "recorded" | "simulated"
+
+export interface AuditRelatedResource {
+  type: "endpoint" | "delivery" | "replay_job"
+  id: string
+  label: string
+  href: string | null
+}
+
+export interface AuditEventDetail {
+  id: string
+  action: string
+  actionLabel: string
+  occurredAt: string
+  actorLabel: string
+  actorType: AuditActorType
+  actorRoleLabel: string | null
+  environment: Environment | null
+  environmentLabel: string
+  summary: string
+  targetType: string
+  targetId: string
+  provenance: AuditProvenance
+  isSimulated: boolean
+  relatedResources: AuditRelatedResource[]
+  operatorNote: string | null
+  httpStatus: number | null
+  executionModeLabel: string | null
+}
+
+export interface AuditListRow {
+  id: string
+  action: string
+  actionLabel: string
+  occurredAt: string
+  actorLabel: string
+  actorType: AuditActorType
+  environment: Environment | null
+  environmentLabel: string
+  targetType: string
+  targetId: string
+  summary: string
+  provenance: AuditProvenance
+  isSimulated: boolean
+  detailHref: string
+}
+
+export interface AuditListResult {
+  rows: AuditListRow[]
+  total: number
+}
+
+export interface AuditTrailEntry {
+  action: string
+  actionLabel: string
+  occurredAt: string
+  actorLabel: string
+  summary: string
+  provenance: AuditProvenance
+  isSimulated: boolean
+  detailHref: string
+}
+
+export interface ReplayJobDetailAggregate {
+  job: ReplayJob
+  items: ReplayJobItem[]
+  endpoint: DeliveryEndpointContext | null
+  requestedBy: User | null
+  requesterRoleLabel: string
+  sourceDelivery: DeliveryRecord | null
+  sourceEvent: DeliveryEventContext | null
+  isSimulated: boolean
+  resultAvailable: boolean
+  auditTrail: AuditTrailEntry[]
 }

@@ -3,8 +3,8 @@ import {
   ArrowRightLeft,
   BarChart3,
   Code2,
+  History,
   LayoutDashboard,
-  ScrollText,
   Settings,
   Webhook,
   Zap,
@@ -31,7 +31,7 @@ const navItems = [
   { label: "Usage", href: "/usage", icon: BarChart3 },
   { label: "Developers", href: "/developers", icon: Code2 },
   { label: "Status", href: "/status", icon: Activity },
-  { label: "Changelog", href: "/changelog", icon: ScrollText },
+  { label: "Audit log", href: "/audit", icon: History },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 
