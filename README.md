@@ -290,7 +290,7 @@ The repository contains nine screenshots that together show the complete RelayOp
 
 | # | Screenshot | Product evidence |
 |---|---|---|
-| 1 | [`01-production-overview.png`](docs/screenshots/01-production-overview.png) | Production telemetry, endpoint health, failure clusters, and product structure |
+| 1 | [`01-production-overview.png`](docs/screenshots/01a-production-overview.png) <br> [`01-production-overview.png`](docs/screenshots/01b-production-overview.png) | Production telemetry, endpoint health, failure clusters, and product structure |
 | 2 | [`02-delivery-explorer.png`](docs/screenshots/02-delivery-explorer.png) | Operational delivery search, filters, and mixed delivery outcomes |
 | 3 | [`03-delivery-assessment.png`](docs/screenshots/03-delivery-assessment.png) | Attempt evidence, deterministic assessment, and replay eligibility |
 | 4 | [`04-replay-acknowledgement.png`](docs/screenshots/04-replay-acknowledgement.png) | Contextual acknowledgement, simulation disclosure, and replay request |
