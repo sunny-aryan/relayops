@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { ArrowLeft, Clock, Copy, Check, FileText } from "lucide-react"
-import { Link, useParams, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { DeliveryAssessmentSection } from "@/components/delivery/assessment-section"
+import { RecoveryActionPanel } from "@/components/delivery/recovery-action-panel"
 import { Mono, MonoPlain } from "@/components/shared/mono"
 import { PageHeader } from "@/components/shared/page-header"
 import { Panel } from "@/components/shared/panel"
@@ -54,20 +55,23 @@ export function DeliveryDetailPage() {
   const { deliveryId } = useParams<{ deliveryId: string }>()
   const { environment } = useApp()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const { data: endpointOptions } = useAsync(
     () => listDeliveryEndpointOptions(environment),
     [environment]
   )
 
-  const backHref = `/deliveries${(() => {
+  const explorerQs = (() => {
     const sanitized = sanitizeExplorerParams(
       searchParams,
       (endpointOptions ?? []).map((e) => e.id)
     )
     const qs = sanitized.toString()
     return qs ? `?${qs}` : ""
-  })()}`
+  })()
+
+  const backHref = `/deliveries${explorerQs}`
 
   const { data, loading, error } = useAsync(
     () => getDeliveryDetailRecord(environment, deliveryId ?? ""),
@@ -98,10 +102,29 @@ export function DeliveryDetailPage() {
     )
   }
 
-  return <DeliveryDetail data={data} backHref={backHref} />
+  return (
+    <DeliveryDetail
+      data={data}
+      backHref={backHref}
+      onReplayRequested={(replayJobId) =>
+        navigate(`/replays/${replayJobId}${explorerQs}`)
+      }
+      explorerQs={explorerQs}
+    />
+  )
 }
 
-function DeliveryDetail({ data, backHref }: { data: DeliveryDetailAssessmentAggregate; backHref: string }) {
+function DeliveryDetail({
+  data,
+  backHref,
+  explorerQs,
+  onReplayRequested,
+}: {
+  data: DeliveryDetailAssessmentAggregate
+  backHref: string
+  explorerQs: string
+  onReplayRequested: (replayJobId: string) => void
+}) {
   const { delivery, event, endpoint, attempts } = data
   const [selectedAttempt, setSelectedAttempt] = useState(attempts.length - 1)
   const [copied, setCopied] = useState(false)
@@ -223,6 +246,22 @@ function DeliveryDetail({ data, backHref }: { data: DeliveryDetailAssessmentAggr
             Assessment unavailable. Required delivery or endpoint references could not be resolved.
           </p>
         </Panel>
+      )}
+
+      {/* Recovery action */}
+      {data.assessment && (
+        <RecoveryActionPanel
+          delivery={delivery}
+          event={event}
+          endpoint={endpoint}
+          assessment={data.assessment}
+          operatorName={data.operatorName}
+          operatorRole={data.operatorRole}
+          replayState={data.replayState}
+          environment={delivery.environment}
+          explorerQs={explorerQs}
+          onReplayRequested={onReplayRequested}
+        />
       )}
 
       {/* Timeline */}

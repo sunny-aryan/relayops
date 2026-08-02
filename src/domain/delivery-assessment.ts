@@ -6,9 +6,15 @@ import type {
   EvidenceFinding,
   OperatorPermission,
   RecommendedAction,
+  ReplayAcknowledgementType,
   ReplayBlocker,
   ReplayEligibilityResult,
+  ReplayHistoryEntry,
 } from "@/types"
+import {
+  canonicalAcknowledgementText,
+  deriveAcknowledgementType,
+} from "@/domain/replay-acknowledgement"
 
 // ---- Authorization policy ----
 
@@ -37,6 +43,14 @@ function roleLabel(role: string): string {
     platform_system: "Platform System",
   }
   return labels[role] ?? role
+}
+
+function hasSuccessfulReplay(history: ReplayHistoryEntry[]): ReplayHistoryEntry | null {
+  return history.find((h) => h.itemStatus === "succeeded") ?? null
+}
+
+function hasFailedReplay(history: ReplayHistoryEntry[]): ReplayHistoryEntry[] {
+  return history.filter((h) => h.itemStatus === "failed")
 }
 
 // ---- Evidence helpers ----
@@ -215,6 +229,26 @@ function buildEvidenceFindings(input: DeliveryAssessmentInput): EvidenceFinding[
     })
   }
 
+  if (hasSuccessfulReplay(input.replayHistory)) {
+    const successfulReplay = hasSuccessfulReplay(input.replayHistory)!
+    findings.push({
+      ruleId: "ev-recovered-by-replay",
+      text: `A manual replay (${successfulReplay.replayJobId}) was accepted by the receiver.`,
+    })
+  }
+
+  if (hasFailedReplay(input.replayHistory).length > 0) {
+    const latestFailed = hasFailedReplay(input.replayHistory)
+      .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))[0]
+    const resultText = latestFailed.resultSummary
+      ? latestFailed.resultSummary
+      : `A recent manual replay (${latestFailed.replayJobId}) was not accepted by the receiver.`
+    findings.push({
+      ruleId: "ev-failed-replay",
+      text: resultText,
+    })
+  }
+
   if (findings.length === 0) {
     findings.push({
       ruleId: "ev-no-evidence",
@@ -271,11 +305,21 @@ function validateAssessmentInputs(input: DeliveryAssessmentInput): string | null
 function classify(input: DeliveryAssessmentInput): AssessmentClassification {
   const { delivery, attempts } = input
 
+  // 1. Missing or inconsistent assessment dependencies
+  // (handled by validateAssessmentInputs before classify is called)
+
+  // 2. Original automatic delivery already succeeded takes precedence
   if (hasSuccessfulAttempt(attempts)) {
     const successAttempt = hasSuccessfulAttempt(attempts)!
     return successAttempt.attemptNumber === 1 ? "delivered" : "delivered_after_retry"
   }
 
+  // 3. Successful manual replay of an originally unsuccessful delivery
+  if (hasSuccessfulReplay(input.replayHistory)) {
+    return "recovered_by_replay"
+  }
+
+  // 4. Remaining delivery classifications
   if (delivery.state === "retrying") return "retrying"
 
   if (delivery.state === "unknown") return "outcome_unknown"
@@ -334,6 +378,8 @@ function buildHeadline(
       return "Retry limit reached without confirmed delivery."
     case "outcome_unknown":
       return "Receiver acceptance could not be confirmed."
+    case "recovered_by_replay":
+      return "Delivery recovered by manual replay."
     case "assessment_unavailable":
       return "Assessment unavailable."
   }
@@ -381,6 +427,10 @@ function buildExplanation(
       }
       parts.push("The receiver may have processed the request, but acceptance could not be confirmed.")
       return parts.join(" ")
+    }
+    case "recovered_by_replay": {
+      const successfulReplay = hasSuccessfulReplay(input.replayHistory)!
+      return `The original automatic delivery exhausted but a later manual replay (${successfulReplay.replayJobId}) was accepted by the receiver. The original attempt history is preserved unchanged.`
     }
     case "assessment_unavailable":
       return "Required delivery or endpoint references could not be resolved. Assessment is unavailable and replay is blocked by default."
@@ -440,6 +490,12 @@ function buildRecommendedAction(
         ruleId: "rec-confirm-downstream",
         text: "Confirm downstream processing before considering replay.",
       }
+    case "recovered_by_replay":
+      return {
+        action: "no_action",
+        ruleId: "rec-no-action-recovered",
+        text: "No action required — the delivery was recovered by a successful manual replay.",
+      }
     case "assessment_unavailable":
       return {
         action: "review_evidence",
@@ -478,7 +534,17 @@ function buildReplayEligibility(
     return finalizeEligibility("already_succeeded", blockers, false)
   }
 
-  // 3. Automatic retry active
+  // 3. Successful manual replay already exists
+  if (hasSuccessfulReplay(input.replayHistory)) {
+    blockers.push({
+      reason: "already_replayed_successfully",
+      ruleId: "replay-already-replayed-successfully",
+      explanation: "This delivery was already recovered by a successful manual replay. Replay is not needed.",
+    })
+    return finalizeEligibility("already_replayed_successfully", blockers, false)
+  }
+
+  // 4. Automatic retry active
   if (delivery.state === "retrying" && delivery.nextRetryAt) {
     blockers.push({
       reason: "retry_active",
@@ -488,7 +554,7 @@ function buildReplayEligibility(
     return finalizeEligibility("retry_active", blockers, false)
   }
 
-  // 4. Outcome unknown / receiver confirmation required
+  // 5. Outcome unknown / receiver confirmation required
   if (delivery.state === "unknown") {
     blockers.push({
       reason: "confirmation_required",
@@ -498,7 +564,7 @@ function buildReplayEligibility(
     return finalizeEligibility("confirmation_required", blockers, false)
   }
 
-  // 5. Payload unavailable
+  // 6. Payload unavailable
   if (event.payloadState === "expired") {
     blockers.push({
       reason: "payload_expired",
@@ -516,7 +582,7 @@ function buildReplayEligibility(
     return finalizeEligibility("payload_unavailable", blockers, false)
   }
 
-  // 6. Endpoint disabled
+  // 7. Endpoint disabled
   if (endpointStatus === "disabled") {
     blockers.push({
       reason: "endpoint_disabled",
@@ -526,7 +592,7 @@ function buildReplayEligibility(
     return finalizeEligibility("endpoint_disabled", blockers, false)
   }
 
-  // 7. Active replay already exists
+  // 8. Active replay already exists
   if (activeReplayJobIds.length > 0) {
     blockers.push({
       reason: "in_active_replay",
@@ -536,7 +602,7 @@ function buildReplayEligibility(
     return finalizeEligibility("in_active_replay", blockers, false)
   }
 
-  // 8. Active replay-blocking incident
+  // 9. Active replay-blocking incident
   if (blockingIncidents.length > 0) {
     blockers.push({
       reason: "blocked_by_incident",
@@ -546,7 +612,7 @@ function buildReplayEligibility(
     return finalizeEligibility("blocked_by_incident", blockers, false)
   }
 
-  // 9. Eligible
+  // 10. Eligible
   const recommendedNow =
     classification === "exhausted_http_503" || classification === "exhausted_other"
       ? false
@@ -577,6 +643,8 @@ export function assessDelivery(input: DeliveryAssessmentInput): DeliveryAssessme
   if (validationError) {
     const classification: AssessmentClassification = "assessment_unavailable"
     const operatorPermission = evaluateOperatorPermission(input.operatorRole)
+    const acknowledgementType: ReplayAcknowledgementType = "generic_replay"
+    const acknowledgementText = canonicalAcknowledgementText(acknowledgementType)
     return {
       classification,
       headline: "Assessment unavailable.",
@@ -601,6 +669,8 @@ export function assessDelivery(input: DeliveryAssessmentInput): DeliveryAssessme
         recommendedNow: false,
       },
       operatorPermission,
+      acknowledgementText,
+      acknowledgementType,
       evaluatedRuleIds: ["classify-assessment_unavailable", "replay-missing-reference", operatorPermission.ruleId],
     }
   }
@@ -612,6 +682,8 @@ export function assessDelivery(input: DeliveryAssessmentInput): DeliveryAssessme
   const recommendedAction = buildRecommendedAction(classification, input)
   const replayEligibility = buildReplayEligibility(classification, input)
   const operatorPermission = evaluateOperatorPermission(input.operatorRole)
+  const acknowledgementType = deriveAcknowledgementType(classification)
+  const acknowledgementText = canonicalAcknowledgementText(acknowledgementType)
 
   const evaluatedRuleIds = [
     `classify-${classification}`,
@@ -629,6 +701,8 @@ export function assessDelivery(input: DeliveryAssessmentInput): DeliveryAssessme
     recommendedAction,
     replayEligibility,
     operatorPermission,
+    acknowledgementText,
+    acknowledgementType,
     evaluatedRuleIds,
   }
 }

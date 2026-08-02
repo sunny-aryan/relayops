@@ -75,6 +75,7 @@ const replayJobStatusTones: Record<ReplayJobStatus, StatusTone> = {
   partially_completed: "warning",
   failed: "danger",
   cancelled: "neutral",
+  skipped: "neutral",
 }
 
 export function ReplayJobStatusBadge({ status }: { status: ReplayJobStatus }) {

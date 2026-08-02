@@ -403,6 +403,11 @@ export const replayJobs: ReplayJob[] = [
     startedAt: "2026-07-03T10:20:05Z",
     completedAt: "2026-07-03T10:26:41Z",
     note: "Recovery sweep of exhausted Billing Sync deliveries from late May; older payloads had already passed the 30-day retention window.",
+    scope: "bulk",
+    executionMode: "recorded",
+    idempotencyKey: null,
+    sourceDeliveryId: null,
+    acknowledgement: null,
   },
 ]
 
@@ -414,6 +419,7 @@ export const replayJobItems: ReplayJobItem[] = [
     status: "skipped",
     resultSummary: "Skipped — payload passed the 30-day retention window on 27 June",
     processedAt: "2026-07-03T10:20:12Z",
+    executionResult: null,
   },
 ]
 

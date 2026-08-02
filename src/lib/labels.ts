@@ -125,6 +125,7 @@ export const replayJobStatusLabels: Record<ReplayJobStatus, string> = {
   partially_completed: "Partially completed",
   failed: "Failed",
   cancelled: "Cancelled",
+  skipped: "Skipped",
 }
 
 export const incidentSeverityLabels: Record<IncidentSeverity, string> = {

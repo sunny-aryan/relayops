@@ -27,12 +27,14 @@ const classificationLabels: Record<string, string> = {
   exhausted_http_401: "Exhausted — HTTP 401",
   exhausted_other: "Exhausted",
   outcome_unknown: "Outcome unknown",
+  recovered_by_replay: "Recovered by replay",
   assessment_unavailable: "Assessment unavailable",
 }
 
 const eligibilityTones: Record<ReplayEligibilityDecision, StatusTone> = {
   eligible: "success",
   already_succeeded: "neutral",
+  already_replayed_successfully: "neutral",
   retry_active: "warning",
   confirmation_required: "warning",
   payload_unavailable: "neutral",
@@ -45,6 +47,7 @@ const eligibilityTones: Record<ReplayEligibilityDecision, StatusTone> = {
 const eligibilityLabels: Record<ReplayEligibilityDecision, string> = {
   eligible: "Eligible for replay",
   already_succeeded: "Already succeeded",
+  already_replayed_successfully: "Already recovered by replay",
   retry_active: "Blocked — retry active",
   confirmation_required: "Blocked — confirmation required",
   payload_unavailable: "Blocked — payload unavailable",
@@ -188,6 +191,8 @@ function classificationTone(classification: string): StatusTone {
       return "danger"
     case "outcome_unknown":
       return "neutral"
+    case "recovered_by_replay":
+      return "success"
     default:
       return "neutral"
   }

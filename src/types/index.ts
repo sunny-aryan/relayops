@@ -148,11 +148,13 @@ export type AssessmentClassification =
   | "exhausted_http_401"
   | "exhausted_other"
   | "outcome_unknown"
+  | "recovered_by_replay"
   | "assessment_unavailable"
 
 export type ReplayEligibilityDecision =
   | "eligible"
   | "already_succeeded"
+  | "already_replayed_successfully"
   | "retry_active"
   | "confirmation_required"
   | "payload_unavailable"
@@ -163,6 +165,7 @@ export type ReplayEligibilityDecision =
 
 export type ReplayBlockerReason =
   | "already_succeeded"
+  | "already_replayed_successfully"
   | "retry_active"
   | "confirmation_required"
   | "payload_expired"
@@ -221,6 +224,8 @@ export interface DeliveryAssessment {
   }
   replayEligibility: ReplayEligibilityResult
   operatorPermission: OperatorPermission
+  acknowledgementText: string
+  acknowledgementType: ReplayAcknowledgementType
   evaluatedRuleIds: string[]
 }
 
@@ -233,6 +238,17 @@ export interface DeliveryAssessmentFacts {
   endpointRetryMaxAttempts: number | null
 }
 
+export interface ReplayHistoryEntry {
+  replayJobId: string
+  deliveryId: string
+  environment: Environment
+  status: ReplayJobStatus
+  itemStatus: ReplayItemStatus
+  outcome: ReplayExecutionOutcome | null
+  completedAt: string | null
+  resultSummary: string | null
+}
+
 export interface DeliveryAssessmentInput {
   delivery: DeliveryRecord
   attempts: DeliveryAttemptRecord[]
@@ -243,12 +259,21 @@ export interface DeliveryAssessmentInput {
   activeReplayJobIds: string[]
   blockingIncidents: PlatformIncident[]
   operatorRole: Role
+  replayHistory: ReplayHistoryEntry[]
+}
+
+export interface ReplayStateInfo {
+  status: "active" | "succeeded" | "failed"
+  replayJobId: string
+  completedAt: string | null
+  resultSummary: string | null
 }
 
 export interface DeliveryDetailAssessmentAggregate extends DeliveryDetailAggregate {
   assessment: DeliveryAssessment | null
   operatorName: string
   operatorRole: Role
+  replayState: ReplayStateInfo | null
 }
 
 export interface DeliveryFilters {
@@ -283,8 +308,14 @@ export type ReplayJobStatus =
   | "partially_completed"
   | "failed"
   | "cancelled"
+  | "skipped"
 
-export type ReplayItemStatus = "pending" | "succeeded" | "failed" | "skipped"
+export type ReplayItemStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
 
 export type IncidentSeverity = "minor" | "major" | "critical"
 
@@ -499,6 +530,39 @@ export interface EndpointInventoryRow {
   successRatePct: number | null
 }
 
+export type ReplayScope = "single" | "bulk"
+
+export type ReplayExecutionMode = "recorded" | "simulated"
+
+export type ReplayAcknowledgementType =
+  | "http_503_recovery"
+  | "http_401_recovery"
+  | "generic_replay"
+
+export interface ReplayAcknowledgement {
+  type: ReplayAcknowledgementType
+  ruleId: string
+  text: string
+  acknowledgedAt: string
+}
+
+export type ReplayExecutionOutcome =
+  | "accepted"
+  | "confirmed_rejection"
+  | "ambiguous"
+  | "skipped"
+  | "unavailable"
+
+export interface ReplayExecutionResult {
+  outcome: ReplayExecutionOutcome
+  httpStatus: number | null
+  sanitizedResponseSummary: string | null
+  latencyMs: number | null
+  startedAt: string | null
+  completedAt: string | null
+  responseAbsent: boolean
+}
+
 export interface ReplayJob {
   id: string
   workspaceId: string
@@ -514,6 +578,11 @@ export interface ReplayJob {
   startedAt: string | null
   completedAt: string | null
   note: string | null
+  scope: ReplayScope
+  executionMode: ReplayExecutionMode
+  idempotencyKey: string | null
+  sourceDeliveryId: string | null
+  acknowledgement: ReplayAcknowledgement | null
 }
 
 export interface ReplayJobItem {
@@ -523,6 +592,53 @@ export interface ReplayJobItem {
   status: ReplayItemStatus
   resultSummary: string | null
   processedAt: string | null
+  executionResult: ReplayExecutionResult | null
+}
+
+export interface SingleReplayCommand {
+  deliveryId: string
+  environment: Environment
+  acknowledgement: boolean
+  note: string | null
+  idempotencyKey: string
+}
+
+export type ReplayCommandError =
+  | "delivery_not_found"
+  | "wrong_environment"
+  | "assessment_unavailable"
+  | "replay_no_longer_eligible"
+  | "operator_not_permitted"
+  | "acknowledgement_required"
+  | "payload_unavailable"
+  | "endpoint_disabled"
+  | "automatic_retry_active"
+  | "receiver_confirmation_required"
+  | "delivery_in_active_replay"
+  | "replay_blocked_by_incident"
+  | "delivery_already_replayed_successfully"
+  | "invalid_idempotency_key_reuse"
+  | "invalid_idempotency_key_format"
+  | "note_too_long"
+  | "execution_unavailable"
+
+export interface ReplayCommandResult {
+  ok: boolean
+  replayJobId: string | null
+  error: ReplayCommandError | null
+  errorMessage: string | null
+}
+
+export interface ReplayJobDetailAggregate {
+  job: ReplayJob
+  items: ReplayJobItem[]
+  endpoint: DeliveryEndpointContext | null
+  requestedBy: User | null
+  requesterRoleLabel: string
+  sourceDelivery: DeliveryRecord | null
+  sourceEvent: DeliveryEventContext | null
+  isSimulated: boolean
+  resultAvailable: boolean
 }
 
 export interface UsageBucket {
